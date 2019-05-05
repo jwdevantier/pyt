@@ -2,7 +2,6 @@
 from libc.stdlib cimport malloc, free, realloc
 from libc.string cimport strcpy, memcpy
 from libc.locale cimport setlocale, LC_ALL
-#from libc.stddef cimport wchar_t
 from libc.stdio cimport (
 fopen, fclose, fgets, fwrite, ftell, fseek, feof,
 SEEK_SET, SEEK_CUR, SEEK_END, FILE)
@@ -18,17 +17,18 @@ cdef extern from "stdio.h" nogil:
 cdef extern from "wchar.h" nogil:
     ctypedef Py_UNICODE wchar_t
     wchar_t *fgetws(wchar_t *buf, int count, FILE *stream)
-    wchar_t* wcsstr(const wchar_t* dest, const wchar_t* src)
+    wchar_t *wcsstr(const wchar_t *dest, const wchar_t *src)
     wchar_t *wcscpy(wchar_t *dest, const wchar_t *src)
     wchar_t *wcsncpy(wchar_t *dest, const wchar_t *src, size_t n);
-    size_t wcslen( const wchar_t *s);
+    size_t wcslen(const wchar_t *s);
 
 cdef extern from "wctype.h" nogil:
-    int iswspace(wchar_t ch) # wint_t
-    int iswlower(wint_t ch ) #wint_t
+    int iswspace(wchar_t ch)  # wint_t
+    int iswlower(wint_t ch)  #wint_t
 
 class PytError(Exception):
     pass
+
 
 cdef size_t count_indent_chars(wchar_t *s):
     # calculate number of leading whitespace characters
@@ -71,19 +71,18 @@ cdef struct cstring:
     wchar_t *buf
     size_t strlen
 
-cdef cstring *cstring_new(size_t initial_size) except NULL:
+cdef cstring *cstring_new(size_t initial_size):
     cdef:
         cstring *cstr = NULL
         wchar_t *cbuf = NULL
     if initial_size == 0:
-        #raise ValueError("'len' cannot be 0")
         return NULL
-    cstr = <cstring *>malloc(sizeof(cstring))
+    cstr = <cstring *> malloc(sizeof(cstring))
     if cstr == NULL:
         return NULL
 
     cstr.buf = NULL
-    cstr.buf = <wchar_t *>malloc(initial_size * sizeof(wchar_t))
+    cstr.buf = <wchar_t *> malloc(initial_size * sizeof(wchar_t))
     if cstr.buf == NULL:
         free(cstr)
         return NULL
@@ -101,18 +100,34 @@ cdef void cstring_free(cstring *cstr):
 cdef int cstring_ncpy_wchar(cstring *dst, wchar_t *src, size_t n):
     cdef wchar_t *new_ptr = NULL
     if n == 0:
-        print("cstring_ncpy_wchar: determine wchar length by wcslen")
+        # print("cstring_ncpy_wchar: determine wchar length by wcslen")
         n = wcslen(src)
-        print(f"wchar_t* length: {n}")
+        # print(f"wchar_t* length: {n}")
     if n >= dst.buflen:
-        print("cstring: realloc")
-        new_ptr = <wchar_t *>realloc(dst.buf, (n+1) * sizeof(wchar_t))
+        # print("cstring: realloc")
+        new_ptr = <wchar_t *> realloc(dst.buf, (n + 1) * sizeof(wchar_t))
         if new_ptr == NULL:
-            #raise MemoryError("cstr_ncpy: src exceeded existing buffer, reallocation failed")
             return -1
         dst.buflen = n + 1
         dst.buf = new_ptr
-        print("realloc done")
+        # print("realloc done")
+    memcpy(dst.buf, src, n * sizeof(wchar_t))
+    dst.buf[n] = '\n'
+    dst.strlen = n
+
+cdef int cstring_ncpy_unicode(cstring *dst, unicode s, size_t n):
+    cdef:
+        wchar_t *src = s
+        wchar_t *new_ptr = NULL
+    if n == 0:
+        n = wcslen(src)
+    if n >= dst.buflen:
+        # realloc needed
+        new_ptr = <wchar_t *> realloc(dst.buf, (n + 1) * sizeof(wchar_t))
+        if new_ptr == NULL:
+            return -1
+        dst.buflen = n + 1
+        dst.buf = new_ptr
     memcpy(dst.buf, src, n * sizeof(wchar_t))
     dst.buf[n] = '\n'
     dst.strlen = n
@@ -120,19 +135,47 @@ cdef int cstring_ncpy_wchar(cstring *dst, wchar_t *src, size_t n):
 cdef size_t cstring_len(cstring *dst):
     return dst.strlen
 
-cdef unicode cstring_2_py(cstring *dst):
-    return dst.buf[:dst.strlen]
+cdef unicode cstring_2_py(cstring *cstr):
+    return cstr.buf[:cstr.strlen]
+
+cdef unicode cstring_repr(cstring *cstr):
+    if cstr == NULL:
+        return "<null (cstring*)>"
+    return "#cstring(buflen: {}, strlen: {}, buf: {})".format(
+        cstr.buflen, cstr.strlen,
+        '<null>' if cstr.buf == NULL else cstr.buf[:cstr.strlen]
+    )
 
 cdef struct ParseState:
     FILE *fh_in
     FILE *fh_out
-    char *tmp_file_path
+    #char *tmp_file_path
+    cstring *tmp_file_path
     size_t line_num
 
     #cstring *tag_open
     #cstring *tag_close
-    wchar_t *buf
     size_t buflen
+    wchar_t *buf
+
+cdef unicode state_repr(ParseState *state):
+    if state == NULL:
+        return "<null (ParseState*)>"
+    return (
+        "#ParseState("
+        "fh_in: {}, "
+        "fh_out: {}, "
+        "tmp_file_path: {}, "
+        "line_num: {}, "
+        "buflen: {}, "
+        "buf: {}"
+        ")").format(
+        '<null (FILE*)>' if (state.fh_in == NULL) else 'FILE*',
+        '<null (FILE*)>' if (state.fh_out == NULL) else 'FILE*',
+        cstring_repr(state.tmp_file_path),
+        state.line_num,
+        state.buflen,
+        '<null (wchar_t*)>' if (state.buf == NULL) else state.buf)
 
 cdef enum:
     READ_EOF = -1
@@ -142,8 +185,7 @@ cdef enum:
 cdef int readline(ParseState *state):
     # Read new line into buffer, advance linenumber if OK
     # signal errors otherwise (READ_ERR, READ_EOF)
-    print(f"readline: fgets(buf, buflen: {state.buflen}, fh_in)")
-    #if not fgets(state.buf, state.buflen, state.fh_in):
+    # print(f"readline: fgets(buf, buflen: {state.buflen}, fh_in)")
     if not fgetws(state.buf, state.buflen, state.fh_in):
         if feof(state.fh_in):
             print("readline: READ_EOF")
@@ -153,27 +195,6 @@ cdef int readline(ParseState *state):
     state.line_num = state.line_num + 1
     print("readline: READ_OK")
     return READ_OK
-
-cdef char *py2c_strcpy(s):
-    """ Copy string into dynamically allocated C buffer
-    Parameters
-    ----------
-    s
-
-    Returns
-    -------
-    
-    """
-    cdef:
-        char *out = <char *> malloc((len(s) + 1) * sizeof(char))
-        char *tmp = NULL
-
-    if not out:
-        return NULL
-        # raise MemoryError("failed to allocate string")
-    tmp_bs = s.encode('UTF-8')
-    tmp = tmp_bs
-    strcpy(out, tmp)
 
 cdef ParseState *state_new():
     cdef ParseState *state = NULL
@@ -214,7 +235,10 @@ cdef int state_init(
     if not fname_dst:
         overwriting = True
         fname_dst = tmp_file(fname_src)
-        state.tmp_file_path = py2c_strcpy(fname_dst)
+        state.tmp_file_path = cstring_new(len(fname_dst) + 1)
+        if not state.tmp_file_path:
+            raise MemoryError("tmp_file_path: failed to allocate cstring")
+        cstring_ncpy_unicode(state.tmp_file_path, fname_dst, len(fname_dst))
     else:
         overwriting = False
 
@@ -246,7 +270,7 @@ cdef state_free(ParseState *state):
         free(state.buf)
     print("state_free buf freed")
     if state.tmp_file_path != NULL:
-        free(state.tmp_file_path)
+        cstring_free(state.tmp_file_path)
 
     free(state)
 
@@ -287,7 +311,7 @@ cdef int do_read_file(ParseState *state) except -1:
                     if not line_prefix:
                         raise PytError("line_prefix: failed to allocate cstring")
                 if snippet_name == NULL:
-                    snippet_name = cstring_new(100 + 1) # plenty for most
+                    snippet_name = cstring_new(100 + 1)  # plenty for most
                     if not snippet_name:
                         raise PytError("snippet_name: failed to allocate cstring")
                 cstring_ncpy_wchar(line_prefix, state.buf, indentation)
@@ -322,10 +346,12 @@ def read_file(fname_src: str, fname_dst: str = ''):
         print("exception")
         if state != NULL and state.tmp_file_path != NULL:
             print("cleanup tmp")
-            os.remove(state.tmp_file_path)
+            os.remove(state.tmp_file_path.buf)
         raise e
     finally:
         print("finally")
         # TODO: enable this - warning! will overwrite files then!
-        #os.replace(fname_src, state.tmp_file_path)
+        #os.replace(fname_src, state.tmp_file_path.buf)
+        print("STATE")
+        print(state_repr(state))
         state_free(state)
