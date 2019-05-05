@@ -1,0 +1,27 @@
+*.swp
+
+# python temporary files
+__pycache__
+*.pyc
+*.egg-info
+
+# virtual environment files
+**/venv
+
+# temp files from tools etc
+**/.mypy_cache
+**/.pytest_cache
+
+# editors
+**/.idea
+**/.vscode
+
+# build artifacts (cython)
+*.o
+*.so
+*.dylib
+*.dll
+
+# cython - specific libraries
+pyt/parser/parser.c
+pyt/parser/parser.html
