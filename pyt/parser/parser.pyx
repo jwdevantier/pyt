@@ -36,7 +36,7 @@ cdef size_t count_indent_chars(wchar_t *s):
         size_t indent_chars = 0
         wchar_t *pos = s
     while True:
-        print(f"count_indent_chars iter: '{pos[0]}'")
+        # print(f"count_indent_chars iter: '{pos[0]}'")
         if pos[0] == '\n' or not iswspace(pos[0]):
             break
         pos = pos + 1
