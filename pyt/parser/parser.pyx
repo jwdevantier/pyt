@@ -32,56 +32,9 @@ cdef extern from "wctype.h" nogil:
     int iswspace(wchar_t ch)  # wint_t
     int iswlower(wint_t ch)  #wint_t
 
-class PytError(Exception):
-    pass
-
-
-cdef size_t count_indent_chars(wchar_t *s):
-    # calculate number of leading whitespace characters
-    cdef:
-        size_t indent_chars = 0
-        wchar_t *pos = s
-    while True:
-        # print(f"count_indent_chars iter: '{pos[0]}'")
-        if pos[0] == '\n' or not iswspace(pos[0]):
-            break
-        pos = pos + 1
-        indent_chars = indent_chars + 1
-    return indent_chars
-
-cdef int cpy_snippet_name(cstring *dst, ParseState *state):
-    cdef:
-        wchar_t *start = NULL
-        wchar_t *end = NULL
-    start = wcsstr(state.buf, state.tag_open.buf)
-    if start == NULL:
-        return -1
-    # advance beyond the opening tag itself
-    start = start + state.tag_open.strlen
-    if (start - state.buf) >= state.buflen:
-        # further analysis would go OOB on the line buffer, abort
-        return -1
-    if start[0] == '/': # end snippet
-        start = start + 1
-    # use start here to enforce correct ordering of tags
-    end = wcsstr(start, state.tag_close.buf)
-    if end == NULL:
-        return -1
-    return cstring_ncpy_wchar(dst, start, end-start)
-
-
-# C api docs: https://devdocs.io/c/io/fopen
-
-def tmp_file(path):
-    in_dir = os.path.dirname(path)
-    fname = f"{os.path.basename(path)}."
-
-    tf = tempfile.NamedTemporaryFile(
-        dir=in_dir, prefix=fname, suffix='.tmp', delete=False)
-    fname = tf.name
-    tf.close()
-    return fname
-
+################################################################################
+## C-Strings
+################################################################################
 cdef struct cstring:
     size_t buflen
     wchar_t *buf
@@ -153,11 +106,12 @@ cdef int cstring_ncpy_unicode(cstring *dst, unicode s, size_t n):
     dst.strlen = n
     return 0
 
+cdef void cstring_clear(cstring *cstr):
+    cstr.buf[0] = '\0'
+    cstr.strlen = 0
+
 cdef size_t cstring_len(cstring *dst):
     return dst.strlen
-
-cdef unicode cstring_2_py(cstring *cstr):
-    return cstr.buf[:cstr.strlen]
 
 cdef unicode cstring_repr(cstring *cstr):
     if cstr == NULL:
@@ -166,6 +120,114 @@ cdef unicode cstring_repr(cstring *cstr):
         cstr.buflen, cstr.strlen,
         '<null>' if cstr.buf == NULL else cstr.buf
     )
+
+################################################################################
+## Snippet
+################################################################################
+cdef enum SNIPPET_TYPE:
+    SNIPPET_NONE
+    SNIPPET_OPEN
+    SNIPPET_CLOSE
+
+cdef struct snippet:
+    cstring *cstr
+    SNIPPET_TYPE type
+
+cdef snippet *snippet_new(size_t bufsiz):
+    cdef:
+        snippet *s = NULL
+        cstring *cstr = NULL
+
+    cstr = cstring_new(bufsiz)
+    if cstr == NULL:
+        return NULL
+
+    s = <snippet *>malloc(sizeof(snippet))
+    if s == NULL:
+        free(cstr)
+        return NULL
+    s.cstr = cstr
+    s.type = SNIPPET_NONE
+    return s
+
+cdef void snippet_clear(snippet *s):
+    cstring_clear(s.cstr)
+    s.type = SNIPPET_NONE
+
+cdef void snippet_free(snippet *s):
+    if s.cstr != NULL:
+        cstring_free(s.cstr)
+    free(s)
+
+cdef int snippet_find(snippet *dst, ParseState *state):
+    cdef:
+        wchar_t *start = NULL
+        wchar_t *end = NULL
+        SNIPPET_TYPE typ = SNIPPET_OPEN
+        int ret = 0
+    start = wcsstr(state.buf, state.tag_open.buf)
+    if start == NULL:
+        print("snippet_find start")
+        return -1
+
+    # advance beyond the snippet prefix itself
+    start = start + state.tag_open.strlen
+
+    # tag sits at the end of the line-buffer, abort
+    if (start - state.buf) >= state.buflen:
+        print("snippet_find OOB")
+        return -1
+
+    if start[0] == '/': # end snippet, advance past slash, too
+        typ = SNIPPET_CLOSE
+        start = start +1
+
+    # find snippet suffix, use 'start' to enforce ordering of tags
+    # and limit the search scope.
+    end = wcsstr(start, state.tag_close.buf)
+    if end == NULL:
+        print("snippet_find end")
+        return -1
+
+    ret = cstring_ncpy_wchar(dst.cstr, start, end-start)
+    if ret != 0:
+        print("snippet_find cpy")
+        return ret
+    dst.type = typ
+    return 0
+
+################################################################################
+## Other
+################################################################################
+class PytError(Exception):
+    pass
+
+
+cdef size_t count_indent_chars(wchar_t *s):
+    # calculate number of leading whitespace characters
+    cdef:
+        size_t indent_chars = 0
+        wchar_t *pos = s
+    while True:
+        # print(f"count_indent_chars iter: '{pos[0]}'")
+        if pos[0] == '\n' or not iswspace(pos[0]):
+            break
+        pos = pos + 1
+        indent_chars = indent_chars + 1
+    return indent_chars
+
+
+
+def tmp_file(path):
+    in_dir = os.path.dirname(path)
+    fname = f"{os.path.basename(path)}."
+
+    tf = tempfile.NamedTemporaryFile(
+        dir=in_dir, prefix=fname, suffix='.tmp', delete=False)
+    fname = tf.name
+    tf.close()
+    return fname
+
 
 cdef struct ParseState:
     FILE *fh_in
@@ -338,9 +400,12 @@ cdef int do_read_file(ParseState *state) except -1:
         int ret = READ_OK
         wchar_t *match_start = NULL
         cstring *line_prefix = NULL
-        cstring *snippet_name = NULL
+        snippet *s_open = snippet_new(70)
+        snippet *s_close = snippet_new(70)
         size_t indentation = 0
     print("do_read_file: called")
+    if s_open == NULL or s_close == NULL:
+        raise PytError("failed to allocate memory for s_open/s_close")
     setlocale(LC_ALL, "en_GB.utf8")
 
     print(f"match open '{state.tag_open.buf}', close: '{state.tag_close.buf}'")
@@ -366,13 +431,9 @@ cdef int do_read_file(ParseState *state) except -1:
                     line_prefix = cstring_new(indentation + 1)
                     if not line_prefix:
                         raise PytError("line_prefix: failed to allocate cstring")
-                if snippet_name == NULL:
-                    snippet_name = cstring_new(100 + 1)  # plenty for most
-                    if not snippet_name:
-                        raise PytError("snippet_name: failed to allocate cstring")
-                if cpy_snippet_name(snippet_name, state) != 0:
-                    raise PytError("SNIPPET COPYING FAILED")
-                print(f"SNIPPET: '{snippet_name.buf}'")
+                # TODO: REFACTOR SNIPPET EXTRACTION CODE
+                if snippet_find(s_open, state) == 0:
+                    print(f"snippet: {s_open.cstr.buf}")
                 cstring_ncpy_wchar(line_prefix, state.buf, indentation)
                 print(f"indentation({indentation}): '{line_prefix.buf}' (len: {cstring_len(line_prefix)})")
                 # TODO: extract snippet name
@@ -387,8 +448,11 @@ cdef int do_read_file(ParseState *state) except -1:
     finally:
         if line_prefix != NULL:
             cstring_free(line_prefix)
-        if snippet_name != NULL:
-            cstring_free(snippet_name)
+        if s_open != NULL:
+            snippet_free(s_open)
+        if s_close != NULL:
+            snippet_free(s_close)
+    return 0
 
 def read_file(
         fname_src: str, fname_dst: t.Optional[str],
