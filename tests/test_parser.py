@@ -8,7 +8,13 @@ def foo():
     print('all done!')"""
 
 def test_x():
-    parser.read_file("/tmp/test-parse.py", "/tmp/test-parse.py.out")
+    #parser.read_file("/tmp/test-parse.py", "/tmp/test-parse.py.out")
+    parser.read_file(
+        "/tmp/test-parse.py",
+        None, # "/tmp/test-parse.py.out",
+        "<@@",
+        "@@>")
+    # TODO: re-test with out=None => tmp_file_path
     # try:
     #     parser.read_file("/tmp/test-parse.py", "/tmp/test-parse.py.out")
     # except parser.PytError as e:

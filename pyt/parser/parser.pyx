@@ -10,6 +10,7 @@ import os
 import typing as t
 
 ctypedef unsigned int wint_t
+DEF PARSER_LINEBUF_SIZ = 512
 
 cdef extern from "stdio.h" nogil:
     char *strstr(const char *haystack, const char *needle)
@@ -17,10 +18,11 @@ cdef extern from "stdio.h" nogil:
 cdef extern from "wchar.h" nogil:
     ctypedef Py_UNICODE wchar_t
     wchar_t *fgetws(wchar_t *buf, int count, FILE *stream)
-    wchar_t *wcsstr(const wchar_t *dest, const wchar_t *src)
+    wchar_t *wcsstr(const wchar_t *haystack, const wchar_t *needle);
     wchar_t *wcscpy(wchar_t *dest, const wchar_t *src)
     wchar_t *wcsncpy(wchar_t *dest, const wchar_t *src, size_t n);
     size_t wcslen(const wchar_t *s);
+    wchar_t *wmemset( wchar_t *dest, wchar_t ch, size_t count );
 
 cdef extern from "wctype.h" nogil:
     int iswspace(wchar_t ch)  # wint_t
@@ -43,16 +45,26 @@ cdef size_t count_indent_chars(wchar_t *s):
         indent_chars = indent_chars + 1
     return indent_chars
 
-cdef enum:
-    TAG_OPEN = 1
-    TAG_CLOSE = 2
+cdef int cpy_snippet_name(cstring *dst, ParseState *state):
+    cdef:
+        wchar_t *start = NULL
+        wchar_t *end = NULL
+    start = wcsstr(state.buf, state.tag_open.buf)
+    if start == NULL:
+        return -1
+    # advance beyond the opening tag itself
+    start = start + state.tag_open.strlen
+    if (start - state.buf) >= state.buflen:
+        # further analysis would go OOB on the line buffer, abort
+        return -1
+    if start[0] == '/': # end snippet
+        start = start + 1
+    # use start here to enforce correct ordering of tags
+    end = wcsstr(start, state.tag_close.buf)
+    if end == NULL:
+        return -1
+    return cstring_ncpy_wchar(dst, start, end-start)
 
-cdef int tag_type(wchar_t *tag):
-    if tag[2] == '/':
-        return TAG_CLOSE
-    return TAG_OPEN
-
-#cdef cstring *snippet_name()
 
 # C api docs: https://devdocs.io/c/io/fopen
 
@@ -77,6 +89,7 @@ cdef cstring *cstring_new(size_t initial_size):
         wchar_t *cbuf = NULL
     if initial_size == 0:
         return NULL
+    initial_size = initial_size + 1 # set aside space for NULL
     cstr = <cstring *> malloc(sizeof(cstring))
     if cstr == NULL:
         return NULL
@@ -86,6 +99,7 @@ cdef cstring *cstring_new(size_t initial_size):
     if cstr.buf == NULL:
         free(cstr)
         return NULL
+    wmemset(cstr.buf, '\0', 1) # NULL it out
     cstr.buflen = initial_size
     cstr.strlen = 0
     return cstr
@@ -101,10 +115,10 @@ cdef int cstring_ncpy_wchar(cstring *dst, wchar_t *src, size_t n):
     cdef wchar_t *new_ptr = NULL
     if n == 0:
         # print("cstring_ncpy_wchar: determine wchar length by wcslen")
-        n = wcslen(src)
+        n = wcslen(src) # does not include NULL
         # print(f"wchar_t* length: {n}")
     if n >= dst.buflen:
-        # print("cstring: realloc")
+        # print("cstring_ncpy_wchar: realloc needed")
         new_ptr = <wchar_t *> realloc(dst.buf, (n + 1) * sizeof(wchar_t))
         if new_ptr == NULL:
             return -1
@@ -112,8 +126,9 @@ cdef int cstring_ncpy_wchar(cstring *dst, wchar_t *src, size_t n):
         dst.buf = new_ptr
         # print("realloc done")
     memcpy(dst.buf, src, n * sizeof(wchar_t))
-    dst.buf[n] = '\n'
+    dst.buf[n] = '\0'
     dst.strlen = n
+    return 0
 
 cdef int cstring_ncpy_unicode(cstring *dst, unicode s, size_t n):
     cdef:
@@ -122,6 +137,7 @@ cdef int cstring_ncpy_unicode(cstring *dst, unicode s, size_t n):
     if n == 0:
         n = wcslen(src)
     if n >= dst.buflen:
+        # print("cstring_ncpy_unicode: realloc needed")
         # realloc needed
         new_ptr = <wchar_t *> realloc(dst.buf, (n + 1) * sizeof(wchar_t))
         if new_ptr == NULL:
@@ -129,8 +145,9 @@ cdef int cstring_ncpy_unicode(cstring *dst, unicode s, size_t n):
         dst.buflen = n + 1
         dst.buf = new_ptr
     memcpy(dst.buf, src, n * sizeof(wchar_t))
-    dst.buf[n] = '\n'
+    dst.buf[n] = '\0'
     dst.strlen = n
+    return 0
 
 cdef size_t cstring_len(cstring *dst):
     return dst.strlen
@@ -143,18 +160,17 @@ cdef unicode cstring_repr(cstring *cstr):
         return "<null (cstring*)>"
     return "#cstring(buflen: {}, strlen: {}, buf: {})".format(
         cstr.buflen, cstr.strlen,
-        '<null>' if cstr.buf == NULL else cstr.buf[:cstr.strlen]
+        '<null>' if cstr.buf == NULL else cstr.buf
     )
 
 cdef struct ParseState:
     FILE *fh_in
     FILE *fh_out
-    #char *tmp_file_path
     cstring *tmp_file_path
     size_t line_num
 
-    #cstring *tag_open
-    #cstring *tag_close
+    cstring *tag_open
+    cstring *tag_close
     size_t buflen
     wchar_t *buf
 
@@ -167,6 +183,8 @@ cdef unicode state_repr(ParseState *state):
         "fh_out: {}, "
         "tmp_file_path: {}, "
         "line_num: {}, "
+        "tag_open: {}, "
+        "tag_close: {}, "
         "buflen: {}, "
         "buf: {}"
         ")").format(
@@ -174,6 +192,8 @@ cdef unicode state_repr(ParseState *state):
         '<null (FILE*)>' if (state.fh_out == NULL) else 'FILE*',
         cstring_repr(state.tmp_file_path),
         state.line_num,
+        cstring_repr(state.tag_open),
+        cstring_repr(state.tag_close),
         state.buflen,
         '<null (wchar_t*)>' if (state.buf == NULL) else state.buf)
 
@@ -188,12 +208,12 @@ cdef int readline(ParseState *state):
     # print(f"readline: fgets(buf, buflen: {state.buflen}, fh_in)")
     if not fgetws(state.buf, state.buflen, state.fh_in):
         if feof(state.fh_in):
-            print("readline: READ_EOF")
+            # print("readline: READ_EOF")
             return READ_EOF
-        print("readline: READ_ERR")
+        # print("readline: READ_ERR")
         return READ_ERR
     state.line_num = state.line_num + 1
-    print("readline: READ_OK")
+    # print("readline: READ_OK")
     return READ_OK
 
 cdef ParseState *state_new():
@@ -202,7 +222,8 @@ cdef ParseState *state_new():
     state = <ParseState *> malloc(sizeof(ParseState))
     if not state:
         raise MemoryError("failed to allocate ParseState object")
-    state.fh_in = state.fh_out = state.tmp_file_path = state.buf = NULL
+    state.fh_in = state.fh_out = NULL
+    state.tmp_file_path = state.tag_open = state.tag_close = state.buf = NULL
     state.buflen = state.line_num = 0
 
     print("state_new: returning")
@@ -211,77 +232,102 @@ cdef ParseState *state_new():
 cdef int state_init(
         ParseState *state,
         fname_src: str, fname_dst: t.Optional[str],
+        tag_open: str, tag_close: str,
         buflen: int) except -1:
+    # Initialize state_init struct - WARNING: does *not* clean up on failure, use state_free!
     cdef:
         char *fname_out = NULL
         char *fname_in = NULL
     print("state_init called")
-    print("state_init: 1")
-    if not state:
+    # print("state_init: 1")
+    if state == NULL:
         raise MemoryError("expected to get an initialized state object")
     if buflen <= 0:
         raise ValueError("buflen must be a positive integer")
     state.buflen = buflen
-    print("state_init: 2")
+    # print("state_init: 2")
 
+    # Open input file
     fname_src_bs = fname_src.encode('UTF-8')
     fname_in = fname_src_bs
-    print("state_init: 3")
     state.fh_in = fopen(fname_in, 'rb')
     if state.fh_in == NULL:
         raise FileNotFoundError(2, f"Input file not found:'{fname_src}'")
-    print("state_init: 4")
+    # print("state_init: fh_in opened")
 
+    # If overwriting the input file - generate a tempfile for output
     if not fname_dst:
         overwriting = True
         fname_dst = tmp_file(fname_src)
-        state.tmp_file_path = cstring_new(len(fname_dst) + 1)
+        state.tmp_file_path = cstring_new(len(fname_dst))
         if not state.tmp_file_path:
             raise MemoryError("tmp_file_path: failed to allocate cstring")
         cstring_ncpy_unicode(state.tmp_file_path, fname_dst, len(fname_dst))
     else:
         overwriting = False
 
+    # Open output file
     fname_dst_bs = fname_dst.encode('UTF-8')
     fname_out = fname_dst_bs
-    print("opening '" + fname_dst + "'")
     state.fh_out = fopen(fname_out, 'wb')
-
     if state.fh_out == NULL:
         # TODO: find better error
         raise RuntimeError(f"Failed to open output file: '{fname_dst}'")
+    # print("state_init: fh_out('" + fname_dst + "') opened")
 
-    #state.buf = <char *> malloc(buflen * sizeof(char))
+    # allocate tag_open cstring
+    state.tag_open = cstring_new(len(tag_open))
+    if state.tag_open == NULL:
+        raise MemoryError("state_init: failed to allocate tag_open cstring")
+    if cstring_ncpy_unicode(state.tag_open, tag_open, len(tag_open)) != 0:
+        raise MemoryError("state_init: failed to init tag_open cstring")
+    # print(f"c len(tag_open): {len(tag_open)} ('{tag_open}')")
+
+    # allocate tag_close cstring
+    state.tag_close = cstring_new(len(tag_close))
+    if state.tag_close == NULL:
+        raise MemoryError("state_init: failed to allocate tag_close cstring")
+    if cstring_ncpy_unicode(state.tag_close, tag_close, len(tag_close)) != 0:
+        raise MemoryError("state_init: failed to init tag_open cstring")
+
+    # Allocate line buffer
     state.buf = <wchar_t *> malloc(buflen * sizeof(wchar_t))
     if not state.buf:
         raise MemoryError("failed to allocate line buffer")
+
+    print("state_init returning")
     return 0
 
 cdef state_free(ParseState *state):
     print("state_free called")
+
+    # Close input file
     if state.fh_in != NULL:
         fclose(state.fh_in)
 
-    print("state_free fh_in closed")
+    # Close output file
     if state.fh_out != NULL:
         fclose(state.fh_out)
-    print("state_free fh_out closed")
-    if state.buf != NULL:
-        free(state.buf)
-    print("state_free buf freed")
+
+    # Free tmp_file_path cstring
     if state.tmp_file_path != NULL:
         cstring_free(state.tmp_file_path)
 
+    # Free tag_open cstring
+    if state.tag_open != NULL:
+        cstring_free(state.tag_open)
+
+    # Free tag_close cstring
+    if state.tag_close != NULL:
+        cstring_free(state.tag_close)
+
+    # Free line buffer
+    if state.buf != NULL:
+        free(state.buf)
+
+    # Finally, free state struct itself
+    print("state_free finished")
     free(state)
-
-cdef int get_snippet_name(cstring *dst, ParseState *state):
-    cdef:
-        size_t offset = 0
-        wchar_t *pos = state.buf
-
-    while offset <= dst.buflen:
-        pass
-    return -1 if (offset > dst.buflen) else 0
 
 cdef int do_read_file(ParseState *state) except -1:
     cdef:
@@ -293,6 +339,8 @@ cdef int do_read_file(ParseState *state) except -1:
     print("do_read_file: called")
     setlocale(LC_ALL, "en_GB.utf8")
 
+    print(f"match open '{state.tag_open.buf}', close: '{state.tag_close.buf}'")
+
     try:
         while not ret:
             print("do_read_file: iter")
@@ -300,11 +348,15 @@ cdef int do_read_file(ParseState *state) except -1:
             if ret:
                 print("do_read_file: iter BREAK")
                 break
-            match_start = wcsstr(state.buf, "<@")
+
+            match_start = wcsstr(state.buf, state.tag_open.buf)
+            print(f"line: '{state.buf}': {'no match' if match_start == NULL else 'match'}")
             if match_start != NULL:
                 #begin - extract snippet name
-                if tag_type(match_start) == TAG_CLOSE:
-                    raise PytError("unexpected closing tag!")
+                print("MATCH")
+                # TODO: rewrite - must actually match a full close tag
+                #if wcsstr(state.buf, state.tag_close.buf) != NULL:
+                #    raise PytError("..unexpected close tag!")
                 indentation = count_indent_chars(state.buf)
                 if line_prefix == NULL:
                     line_prefix = cstring_new(indentation + 1)
@@ -314,8 +366,11 @@ cdef int do_read_file(ParseState *state) except -1:
                     snippet_name = cstring_new(100 + 1)  # plenty for most
                     if not snippet_name:
                         raise PytError("snippet_name: failed to allocate cstring")
+                if cpy_snippet_name(snippet_name, state) != 0:
+                    raise PytError("SNIPPET COPYING FAILED")
+                print(f"SNIPPET: '{snippet_name.buf}'")
                 cstring_ncpy_wchar(line_prefix, state.buf, indentation)
-                print(f"indentation({indentation}): '{cstring_2_py(line_prefix)}' (len: {cstring_len(line_prefix)})")
+                print(f"indentation({indentation}): '{line_prefix.buf}' (len: {cstring_len(line_prefix)})")
                 # TODO: extract snippet name
                 # TODO: keep consuming file (DON'T WRITE) until closing tag is reached
                 # TODO: call generator, insert output into file.
@@ -331,15 +386,18 @@ cdef int do_read_file(ParseState *state) except -1:
         if snippet_name != NULL:
             cstring_free(snippet_name)
 
-def read_file(fname_src: str, fname_dst: str = ''):
+def read_file(
+        fname_src: str, fname_dst: t.Optional[str],
+        tag_open: str, tag_close: str):
     cdef:
         ParseState *state = NULL
+    if not fname_dst:
+        fname_dst = ''
     print("pre state make")
 
     state = state_new()
     try:
-        print("WTFH")
-        state_init(state, fname_src, fname_dst, 512)
+        state_init(state, fname_src, fname_dst, tag_open, tag_close, PARSER_LINEBUF_SIZ)
         do_read_file(state)
 
     except Exception as e:
