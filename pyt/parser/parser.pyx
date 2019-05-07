@@ -1,13 +1,17 @@
 # cython: language_level=3
 from libc.stdlib cimport malloc, free, realloc
-from libc.string cimport strcpy, memcpy
+from libc.string cimport memcpy
 from libc.locale cimport setlocale, LC_ALL
-from libc.stdio cimport (
-fopen, fclose, fgets, fwrite, ftell, fseek, feof,
-SEEK_SET, SEEK_CUR, SEEK_END, FILE)
+from libc.stdio cimport (fopen, fclose, feof, FILE)
 import tempfile
 import os
 import typing as t
+
+# C api docs: https://devdocs.io/c/io/fopen
+
+################################################################################
+## DEFINITIONS
+################################################################################
 
 ctypedef unsigned int wint_t
 DEF PARSER_LINEBUF_SIZ = 512
