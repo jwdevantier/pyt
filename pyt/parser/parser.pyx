@@ -197,38 +197,8 @@ cdef int snippet_find(snippet *dst, ParseState *state):
     return 0
 
 ################################################################################
-## Other
+## ParseState
 ################################################################################
-class PytError(Exception):
-    pass
-
-
-cdef size_t count_indent_chars(wchar_t *s):
-    # calculate number of leading whitespace characters
-    cdef:
-        size_t indent_chars = 0
-        wchar_t *pos = s
-    while True:
-        # print(f"count_indent_chars iter: '{pos[0]}'")
-        if pos[0] == '\n' or not iswspace(pos[0]):
-            break
-        pos = pos + 1
-        indent_chars = indent_chars + 1
-    return indent_chars
-
-
-
-def tmp_file(path):
-    in_dir = os.path.dirname(path)
-    fname = f"{os.path.basename(path)}."
-
-    tf = tempfile.NamedTemporaryFile(
-        dir=in_dir, prefix=fname, suffix='.tmp', delete=False)
-    fname = tf.name
-    tf.close()
-    return fname
-
-
 cdef struct ParseState:
     FILE *fh_in
     FILE *fh_out
@@ -239,48 +209,6 @@ cdef struct ParseState:
     cstring *tag_close
     size_t buflen
     wchar_t *buf
-
-cdef unicode state_repr(ParseState *state):
-    if state == NULL:
-        return "<null (ParseState*)>"
-    return (
-        "#ParseState("
-        "fh_in: {}, "
-        "fh_out: {}, "
-        "tmp_file_path: {}, "
-        "line_num: {}, "
-        "tag_open: {}, "
-        "tag_close: {}, "
-        "buflen: {}, "
-        "buf: {}"
-        ")").format(
-        '<null (FILE*)>' if (state.fh_in == NULL) else 'FILE*',
-        '<null (FILE*)>' if (state.fh_out == NULL) else 'FILE*',
-        cstring_repr(state.tmp_file_path),
-        state.line_num,
-        cstring_repr(state.tag_open),
-        cstring_repr(state.tag_close),
-        state.buflen,
-        '<null (wchar_t*)>' if (state.buf == NULL) else state.buf)
-
-cdef enum:
-    READ_EOF = -1
-    READ_OK = 0
-    READ_ERR = 1
-
-cdef int readline(ParseState *state):
-    # Read new line into buffer, advance linenumber if OK
-    # signal errors otherwise (READ_ERR, READ_EOF)
-    # print(f"readline: fgets(buf, buflen: {state.buflen}, fh_in)")
-    if not fgetws(state.buf, state.buflen, state.fh_in):
-        if feof(state.fh_in):
-            # print("readline: READ_EOF")
-            return READ_EOF
-        # print("readline: READ_ERR")
-        return READ_ERR
-    state.line_num = state.line_num + 1
-    # print("readline: READ_OK")
-    return READ_OK
 
 cdef ParseState *state_new():
     cdef ParseState *state = NULL
@@ -394,6 +322,81 @@ cdef state_free(ParseState *state):
     # Finally, free state struct itself
     print("state_free finished")
     free(state)
+
+cdef unicode state_repr(ParseState *state):
+    if state == NULL:
+        return "<null (ParseState*)>"
+    return (
+        "#ParseState("
+        "fh_in: {}, "
+        "fh_out: {}, "
+        "tmp_file_path: {}, "
+        "line_num: {}, "
+        "tag_open: {}, "
+        "tag_close: {}, "
+        "buflen: {}, "
+        "buf: {}"
+        ")").format(
+        '<null (FILE*)>' if (state.fh_in == NULL) else 'FILE*',
+        '<null (FILE*)>' if (state.fh_out == NULL) else 'FILE*',
+        cstring_repr(state.tmp_file_path),
+        state.line_num,
+        cstring_repr(state.tag_open),
+        cstring_repr(state.tag_close),
+        state.buflen,
+        '<null (wchar_t*)>' if (state.buf == NULL) else state.buf)
+
+
+################################################################################
+## Other
+################################################################################
+class PytError(Exception):
+    pass
+
+
+cdef size_t count_indent_chars(wchar_t *s):
+    # calculate number of leading whitespace characters
+    cdef:
+        size_t indent_chars = 0
+        wchar_t *pos = s
+    while True:
+        # print(f"count_indent_chars iter: '{pos[0]}'")
+        if pos[0] == '\n' or not iswspace(pos[0]):
+            break
+        pos = pos + 1
+        indent_chars = indent_chars + 1
+    return indent_chars
+
+
+
+def tmp_file(path):
+    in_dir = os.path.dirname(path)
+    fname = f"{os.path.basename(path)}."
+
+    tf = tempfile.NamedTemporaryFile(
+        dir=in_dir, prefix=fname, suffix='.tmp', delete=False)
+    fname = tf.name
+    tf.close()
+    return fname
+
+cdef enum:
+    READ_EOF = -1
+    READ_OK = 0
+    READ_ERR = 1
+
+cdef int readline(ParseState *state):
+    # Read new line into buffer, advance linenumber if OK
+    # signal errors otherwise (READ_ERR, READ_EOF)
+    # print(f"readline: fgets(buf, buflen: {state.buflen}, fh_in)")
+    if not fgetws(state.buf, state.buflen, state.fh_in):
+        if feof(state.fh_in):
+            # print("readline: READ_EOF")
+            return READ_EOF
+        # print("readline: READ_ERR")
+        return READ_ERR
+    state.line_num = state.line_num + 1
+    # print("readline: READ_OK")
+    return READ_OK
 
 cdef int do_read_file(ParseState *state) except -1:
     cdef:
