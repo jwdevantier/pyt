@@ -25,8 +25,11 @@ cdef extern from "wchar.h" nogil:
     wchar_t *wcsstr(const wchar_t *haystack, const wchar_t *needle);
     wchar_t *wcscpy(wchar_t *dest, const wchar_t *src)
     wchar_t *wcsncpy(wchar_t *dest, const wchar_t *src, size_t n);
-    size_t wcslen(const wchar_t *s);
+    size_t wcslen(const wchar_t *s); #TODO: remove
+    size_t wcsnlen_s(const wchar_t *s, size_t strsz);
+
     wchar_t *wmemset( wchar_t *dest, wchar_t ch, size_t count );
+    int wcscmp( const wchar_t *lhs, const wchar_t *rhs );
 
 cdef extern from "wctype.h" nogil:
     int iswspace(wchar_t ch)  # wint_t
@@ -106,7 +109,7 @@ cdef int cstring_ncpy_unicode(cstring *dst, unicode s, size_t n):
     dst.strlen = n
     return 0
 
-cdef void cstring_clear(cstring *cstr):
+cdef void cstring_reset(cstring *cstr):
     cstr.buf[0] = '\0'
     cstr.strlen = 0
 
@@ -132,6 +135,7 @@ cdef enum SNIPPET_TYPE:
 cdef struct snippet:
     cstring *cstr
     SNIPPET_TYPE type
+    size_t line_num
 
 cdef snippet *snippet_new(size_t bufsiz):
     cdef:
@@ -148,11 +152,13 @@ cdef snippet *snippet_new(size_t bufsiz):
         return NULL
     s.cstr = cstr
     s.type = SNIPPET_NONE
+    s.line_num = 0
     return s
 
-cdef void snippet_clear(snippet *s):
-    cstring_clear(s.cstr)
+cdef void snippet_reset(snippet *s):
+    cstring_reset(s.cstr)
     s.type = SNIPPET_NONE
+    s.line_num = 0
 
 cdef void snippet_free(snippet *s):
     if s.cstr != NULL:
@@ -194,6 +200,7 @@ cdef int snippet_find(snippet *dst, ParseState *state):
         print("snippet_find cpy")
         return ret
     dst.type = typ
+    dst.line_num = state.line_num
     return 0
 
 ################################################################################
@@ -401,12 +408,13 @@ cdef int readline(ParseState *state):
 cdef int do_read_file(ParseState *state) except -1:
     cdef:
         int ret = READ_OK
-        wchar_t *match_start = NULL
-        cstring *line_prefix = NULL
+        cstring *line_prefix = cstring_new(50)
         snippet *s_open = snippet_new(70)
         snippet *s_close = snippet_new(70)
         size_t indentation = 0
     print("do_read_file: called")
+    if line_prefix == NULL:
+        raise PytError("failed to allocate buffer for line_prefix")
     if s_open == NULL or s_close == NULL:
         raise PytError("failed to allocate memory for s_open/s_close")
     setlocale(LC_ALL, "en_GB.utf8")
@@ -414,40 +422,63 @@ cdef int do_read_file(ParseState *state) except -1:
     print(f"match open '{state.tag_open.buf}', close: '{state.tag_close.buf}'")
 
     try:
-        while not ret:
-            print("do_read_file: iter")
+        while True:
+            # print("do_read_file: iter")
             ret = readline(state)
             if ret:
                 print("do_read_file: iter BREAK")
                 break
 
-            match_start = wcsstr(state.buf, state.tag_open.buf)
-            print(f"line: '{state.buf}': {'no match' if match_start == NULL else 'match'}")
-            if match_start != NULL:
-                #begin - extract snippet name
-                print("MATCH")
-                # TODO: rewrite - must actually match a full close tag
-                #if wcsstr(state.buf, state.tag_close.buf) != NULL:
-                #    raise PytError("..unexpected close tag!")
-                indentation = count_indent_chars(state.buf)
-                if line_prefix == NULL:
-                    line_prefix = cstring_new(indentation + 1)
-                    if not line_prefix:
-                        raise PytError("line_prefix: failed to allocate cstring")
-                # TODO: REFACTOR SNIPPET EXTRACTION CODE
-                if snippet_find(s_open, state) == 0:
-                    print(f"snippet: {s_open.cstr.buf}")
-                cstring_ncpy_wchar(line_prefix, state.buf, indentation)
-                print(f"indentation({indentation}): '{line_prefix.buf}' (len: {cstring_len(line_prefix)})")
-                # TODO: extract snippet name
-                # TODO: keep consuming file (DON'T WRITE) until closing tag is reached
-                # TODO: call generator, insert output into file.
-                # TODO: break and continue anew.
+            if snippet_find(s_open, state) != 0:
+                continue
+            if s_open.type == SNIPPET_CLOSE:
+                raise PytError("unexpected close tag")
 
-                print("match - got <@ in line:")
-                print(f"match: {match_start}")
-                #print(f"indentation: {count_indent_chars(state.buf)}")
-                #print(f"indentation: ")
+            while True:
+                ret = readline(state)
+                if ret:
+                    # TODO: OK to break and then have outer loop attempt reading a line again?
+                    break
+
+                if snippet_find(s_close, state) != 0:
+                    continue
+                if s_close.type == SNIPPET_OPEN:
+                    raise PytError("unexpected open snippet - expected a close snippet")
+
+                if wcscmp(s_open.cstr.buf, s_close.cstr.buf) != 0:
+                    raise PytError("got open and close snippets referring to different snippets")
+
+                print(f"SNIPPET '{s_open.cstr.buf}' from {s_open.line_num}-{s_close.line_num}")
+                # TODO: write contents into the other file - EXCEPT FROM START TO END SNIPPET
+                # TODO: @ end snippet marker - run snippet, insert lines, write end snippet
+                # TODO: BREAK; CONTINUE ANEW
+
+            #print(f"line: '{state.buf}': {'no match' if match_start == NULL else 'match'}")
+            # if match_start != NULL:
+            #     #begin - extract snippet name
+            #     print("MATCH")
+            #     # TODO: rewrite - must actually match a full close tag
+            #     #if wcsstr(state.buf, state.tag_close.buf) != NULL:
+            #     #    raise PytError("..unexpected close tag!")
+            #     indentation = count_indent_chars(state.buf)
+            #     if line_prefix == NULL:
+            #         line_prefix = cstring_new(indentation + 1)
+            #         if not line_prefix:
+            #             raise PytError("line_prefix: failed to allocate cstring")
+            #     # TODO: REFACTOR SNIPPET EXTRACTION CODE
+            #     if snippet_find(s_open, state) == 0:
+            #         print(f"snippet: {s_open.cstr.buf}")
+            #     cstring_ncpy_wchar(line_prefix, state.buf, indentation)
+            #     print(f"indentation({indentation}): '{line_prefix.buf}' (len: {cstring_len(line_prefix)})")
+            #     # TODO: extract snippet name
+            #     # TODO: keep consuming file (DON'T WRITE) until closing tag is reached
+            #     # TODO: call generator, insert output into file.
+            #     # TODO: break and continue anew.
+            #
+            #     print("match - got <@ in line:")
+            #     print(f"match: {match_start}")
+            #     #print(f"indentation: {count_indent_chars(state.buf)}")
+            #     #print(f"indentation: ")
     finally:
         if line_prefix != NULL:
             cstring_free(line_prefix)
