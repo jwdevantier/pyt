@@ -2,7 +2,7 @@
 from libc.stdlib cimport malloc, free, realloc
 from libc.string cimport memcpy
 from libc.locale cimport setlocale, LC_ALL
-from libc.stdio cimport (fopen, fclose, fwrite, feof, FILE)
+from libc.stdio cimport (fopen, fclose, fwrite, fflush, feof, perror, FILE)
 import tempfile
 import os
 import typing as t
@@ -12,6 +12,10 @@ import typing as t
 ################################################################################
 ## DEFINITIONS
 ################################################################################
+
+cdef:
+    const char *FILE_READ = 'rb'
+    const char *FILE_WRITE = 'wb'
 
 ctypedef unsigned int wint_t
 DEF PARSER_LINEBUF_SIZ = 512
@@ -59,10 +63,10 @@ cdef struct cstr:
     wchar_t *ptr
     size_t strlen
 
-cdef cstr *cstr_new(size_t initial_size):
+cdef cstr *cstr_new(size_t initial_size) nogil:
     cdef cstr *self = NULL
     if initial_size == 0:
-        raise ValueError("initial_size must be a positive integer")
+        return NULL # TODO: interface with errno
     initial_size = initial_size + 1 # reserve space for null character
 
     self = <cstr *>malloc(sizeof(cstr))
@@ -79,23 +83,27 @@ cdef cstr *cstr_new(size_t initial_size):
     self.strlen = 0
     return self
 
-cdef void cstr_free(cstr *self):
+cdef void cstr_free(cstr *self) nogil:
     if self == NULL:
         return
     if self.ptr != NULL:
         free(self.ptr)
     free(self)
 
-cdef int cstr_ncpy_wchar(cstr *self, wchar_t *src, size_t n):
-    cdef wchar_t *new_ptr = NULL
+cdef int cstr_realloc(cstr *self, size_t n) nogil:
+    new_ptr = <wchar_t *> realloc(self.ptr, (n + 1) * sizeof(wchar_t))
+    if new_ptr == NULL:
+        return -1
+    self.buflen = n + 1
+    self.ptr = new_ptr
+    return 0
+
+cdef int cstr_ncpy_wchar(cstr *self, wchar_t *src, size_t n) nogil:
     if n == 0:
         n = wcslen(src) # does NOT include null terminator
     if n >= self.buflen:
-        new_ptr = <wchar_t *> realloc(self.ptr, (n + 1) * sizeof(wchar_t))
-        if new_ptr == NULL:
+        if cstr_realloc(self, n) != 0:
             return -1
-        self.buflen = n + 1
-        self.ptr = new_ptr
     memcpy(self.ptr, src, n * sizeof(wchar_t))
     self.ptr[n] = '\0'
     self.strlen = n
@@ -106,11 +114,11 @@ cdef int cstr_ncpy_unicode(cstr *self, unicode s, size_t n):
         wchar_t *src = s
     return cstr_ncpy_wchar(self, src, n)
 
-cdef void cstr_reset(cstr *self):
+cdef void cstr_reset(cstr *self) nogil:
     self.ptr[0] = '\0'
     self.strlen = 0
 
-cdef size_t cstr_len(cstr *self):
+cdef size_t cstr_len(cstr *self) nogil:
     return self.strlen
 
 cdef unicode cstr_repr(cstr *self):
@@ -142,7 +150,7 @@ cdef unicode snippet_type(SNIPPET_TYPE t):
     else:
         return "UNKNOWN_SNIPPET"
 
-cdef snippet *snippet_new(size_t bufsiz):
+cdef snippet *snippet_new(size_t bufsiz) nogil:
     cdef:
         snippet *self = NULL
         cstr *cstr = NULL
@@ -160,17 +168,17 @@ cdef snippet *snippet_new(size_t bufsiz):
     self.line_num = 0
     return self
 
-cdef void snippet_reset(snippet *self):
+cdef void snippet_reset(snippet *self) nogil:
     cstr_reset(self.cstr)
     self.type = SNIPPET_NONE
     self.line_num = 0
 
-cdef void snippet_free(snippet *self):
+cdef void snippet_free(snippet *self) nogil:
     if self.cstr != NULL:
         cstr_free(self.cstr)
     free(self)
 
-cdef int snippet_cmp(snippet *lhs, snippet *rhs):
+cdef int snippet_cmp(snippet *lhs, snippet *rhs) nogil:
     return wcscmp(lhs.cstr.ptr, rhs.cstr.ptr)
 
 cdef unicode snippet_repr(snippet *self):
@@ -191,6 +199,31 @@ DEF BUF_LINE_LEN = 512
 DEF BUF_SNIPPET_NAME_LEN = 80
 DEF BUF_INDENT_BY_LEN = 40
 
+ctypedef unsigned int PARSE_RES
+cdef enum:
+    PARSE_OK = 0
+    PARSE_READ_ERR = 1 # test - permissions issues
+    PARSE_WRITE_ERR = 2
+    PARSE_EXPECTED_SNIPPET_OPEN = 3
+    PARSE_EXPECTED_SNIPPET_CLOSE = 4
+    PARSE_SNIPPET_NAMES_MISMATCH = 5
+
+cdef unicode parse_result_err(PARSE_RES res):
+    if res == PARSE_OK:
+        return "Parse OK"
+    elif res == PARSE_READ_ERR:
+        return "Failed to read from input file"
+    elif res == PARSE_WRITE_ERR:
+        return "Failed to write to output file"
+    elif res == PARSE_EXPECTED_SNIPPET_OPEN:
+        return "Unexpected tag, expected a snippet open tag"
+    elif res == PARSE_EXPECTED_SNIPPET_CLOSE:
+        return "Unexpected tag, expected a snippet close tag"
+    elif res == PARSE_SNIPPET_NAMES_MISMATCH:
+        return "open and close tags do not have matching names - nesting error?"
+    else:
+        return "Unknown parse error!"
+
 cdef enum:
     READ_EOF = -1
     READ_OK = 0
@@ -203,9 +236,9 @@ cdef class Parser:
     def __init__(
             self,
             tag_open: str = '<@@', tag_close: str = '@@>',
-            buf_len_line = BUF_LINE_LEN,
-            buf_snippet_name_len = BUF_SNIPPET_NAME_LEN,
-            buf_indent_by_len = BUF_INDENT_BY_LEN):
+            size_t buf_len_line = BUF_LINE_LEN,
+            size_t buf_snippet_name_len = BUF_SNIPPET_NAME_LEN,
+            size_t buf_indent_by_len = BUF_INDENT_BY_LEN):
         self.fh_in = self.fh_out = NULL
 
         if buf_len_line <= 0:
@@ -244,6 +277,7 @@ cdef class Parser:
         self.line = cstr_new(buf_len_line)
         if self.line == NULL:
             raise MemoryError("allocating line")
+        self.line_num = 0
 
     def reset(self, fpath_src: str, fpath_dst: t.Optional[str]):
         # TODO: also reset line number (where IS the line number?) and so on
@@ -260,10 +294,12 @@ cdef class Parser:
             fclose(self.fh_in)
             self.fh_in = NULL
 
+        self.line_num = 0
+
         # Open input file
         fpath_src_bs = fpath_src.encode('UTF-8')
         fh_in_str = fpath_src_bs
-        self.fh_in = fopen(fh_in_str, 'rb')
+        self.fh_in = fopen(fh_in_str, FILE_READ)
         if self.fh_in == NULL:
             raise FileNotFoundError(2, f"input file '{fpath_src}' not found")
 
@@ -275,7 +311,7 @@ cdef class Parser:
         # Open output file
         fname_dst_bs = fpath_dst.encode('UTF-8')
         fh_out_str = fname_dst_bs
-        self.fh_out = fopen(fh_out_str, 'wb')
+        self.fh_out = fopen(fh_out_str, FILE_WRITE)
         if self.fh_out == NULL:
             # TODO: better error needed
             raise RuntimeError(f"failed to open output file: '{fpath_dst}'")
@@ -325,7 +361,7 @@ cdef class Parser:
     def __repr__(self):
         return self.repr()
 
-    cdef int snippet_find(self, snippet* dst):
+    cdef int snippet_find(self, snippet* dst) nogil:
         cdef:
             wchar_t *start = NULL
             wchar_t *end = NULL
@@ -363,7 +399,7 @@ cdef class Parser:
         dst.line_num = self.line_num
         return 0
 
-    cdef int readline(self):
+    cdef int readline(self) nogil:
         # Read new line into buffer, advance linenumber if OK
         # signal errors otherwise (READ_ERR, READ_EOF)
         cdef size_t n = 0
@@ -373,27 +409,40 @@ cdef class Parser:
                 return READ_EOF
             # print("readline: READ_ERR")
             return READ_ERR
+        n = wcslen(self.line.ptr)
+        if n == self.line.strlen:
+            if cstr_realloc(self.line, self.line.buflen * 2) != 0:
+                return READ_ERR
+            # TODO: technically recursive.. could be bad?
+            return self.readline()
+        self.line.strlen = n
 
         self.line_num = self.line_num + 1
         # print("readline: READ_OK")
         return READ_OK
 
-    def parse(self, fname_src: str, fname_dst: t.Optional[str]):
-        cdef:
-            int ret = READ_OK
-        self.reset(fname_src, fname_dst)
+    cdef int writeline(self) nogil:
+        cdef size_t nchars_written = -1
+        nchars_written = fwrite(self.line.ptr, sizeof(wchar_t) * self.line.strlen, 1, self.fh_out)
+        if nchars_written != 1:
+            perror("write failed")
+            return -1
+        return 0
 
+    cdef PARSE_RES doparse(self) nogil:
+        cdef int ret = READ_OK
         setlocale(LC_ALL, "en_GB.utf8") # TODO: set differently ?
         while True:
             ret = self.readline()
             if ret:
-                print("parse -- ITER BREAK")
                 break
 
             if self.snippet_find(self.snippet_start) != 0:
+                if self.writeline() != 0:
+                    return PARSE_WRITE_ERR
                 continue
             if self.snippet_start.type != SNIPPET_OPEN:
-                raise PytError(f"Expected SNIPPET_OPEN, got '{snippet_type(self.snippet_start.type)}'")
+                return PARSE_EXPECTED_SNIPPET_OPEN
 
             while True: # Got the opening snippet, look for closing snippet
                 ret = self.readline()
@@ -403,12 +452,27 @@ cdef class Parser:
                     break
 
                 if self.snippet_find(self.snippet_end) != 0:
-                    continue
+                    continue  # old output, skip
                 if self.snippet_end.type != SNIPPET_CLOSE:
-                    raise PytError(f"Expected SNIPPET_OPEN, got '{snippet_type(self.snippet_end.type)}'")
+                    return PARSE_EXPECTED_SNIPPET_CLOSE
 
-                # TODO: rewrite to snippet_cmp
                 if snippet_cmp(self.snippet_start, self.snippet_end) != 0:
-                    raise PytError("got open and close snippets referring to different snippets")
+                    return PARSE_SNIPPET_NAMES_MISMATCH
 
-                print(f"SNIPPET '{self.snippet_start.cstr.ptr}' from {self.snippet_start.line_num}-{self.snippet_end.line_num}")
+                #print(f"SNIPPET '{self.snippet_start.cstr.ptr}' from {self.snippet_start.line_num}-{self.snippet_end.line_num}")
+                # TODO: run snippet code, write in the results here
+                # TODO: also - expand output to be aligned with snippet indentation
+                break  # Done, go back to outer state
+
+    def parse(self, fname_src: str, fname_dst: t.Optional[str]):
+        cdef PARSE_RES res = PARSE_OK
+        self.reset(fname_src, fname_dst)
+
+        try:
+            res = self.doparse()
+            if res != PARSE_OK:
+                return parse_result_err(res)
+        finally:
+            # TODO: if temporary file, rename/move
+            if fflush(self.fh_out) != 0:
+                raise PytError("flushing output failed!")

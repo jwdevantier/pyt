@@ -57,6 +57,8 @@ cdef class Parser:
 
 
     cdef repr(self)
-    cdef int snippet_find(self, snippet* dst)
-    cdef int readline(self)
+    cdef int snippet_find(self, snippet* dst) nogil
+    cdef int readline(self) nogil
+    cdef int writeline(self) nogil
+    cdef unsigned int doparse(self) nogil
 
