@@ -23,5 +23,5 @@ __pycache__
 *.dll
 
 # cython - specific libraries
-pyt/parser/parser.c
-pyt/parser/parser.html
+pyt/parser/*.c
+pyt/parser/*.html
