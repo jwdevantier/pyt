@@ -2,6 +2,7 @@ from io import StringIO
 import attr
 import typing as t
 from typing_extensions import Protocol
+from pyt.protocols import IWriter
 
 
 # Minimal writer inspired by PicoCog
@@ -17,7 +18,7 @@ _indent_cache: t.Dict[int, Newline] = {}
 
 
 class Section(Protocol):
-    def render(self, out: StringIO) -> None:
+    def render(self, out: IWriter) -> None:
         ...
 
 
@@ -102,7 +103,8 @@ class Writer:
         self._content.append(w)
         return w
 
-    def render(self, buf: StringIO) -> None:
+    # Union to avoid spurious type warnings
+    def render(self, buf: t.Union[IWriter, StringIO]) -> None:
         if self._buf.tell() != 0:
             self.__flush()
         content = self._content
