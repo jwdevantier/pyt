@@ -193,6 +193,36 @@ cdef unicode snippet_repr(snippet *self):
     ).format(cstr_repr(self.cstr), snippet_type(self.type), self.line_num)
 
 ################################################################################
+## FileWriter
+################################################################################
+cdef class FileWriter:
+    cdef FILE *out
+
+    def write(self, s: str) -> None:
+        cdef:
+            size_t written = 0
+            wchar_t *ss = s # TODO: look into this, does it work?
+        if fwrite(ss, sizeof(wchar_t) * len(s), 1, self.out) != 1:
+            raise PytError("write failed")
+        return
+
+    def __dealloc__(self):
+        if fflush(self.out) != 0:
+            raise PytError("failed to flush output - file may miss contents")
+
+    def __repr__(self):
+        return f"<FileWriter out: {'open' if self.out != NULL else 'null'}>"
+
+    # Use this factory method to initialize.
+    # This is done because all arguments to __init__ are coerced to Python objects
+    # see https://cython.readthedocs.io/en/latest/src/userguide/extension_types.html#existing-pointers-instantiation
+    @staticmethod
+    cdef FileWriter from_handle(FILE *fh):
+        cdef FileWriter w = FileWriter.__new__(FileWriter)
+        w.out = fh
+        return w
+
+################################################################################
 ## Parser
 ################################################################################
 DEF BUF_LINE_LEN = 512
@@ -429,9 +459,15 @@ cdef class Parser:
             return -1
         return 0
 
-    cdef PARSE_RES doparse(self) nogil:
+    cdef void expand_snippet(self, c_snippet_cb f):
+        cdef FileWriter fw = FileWriter.from_handle(self.fh_out)
+        env = {}  # TODO: change - should persist across calls
+        print("RUNNING SNIPPET EXPAND")
+        (<object>f)(env, fw, "example.file")  # TODO: keep filename around
+
+    cdef PARSE_RES doparse(self, c_snippet_cb cb) nogil:
         cdef int ret = READ_OK
-        setlocale(LC_ALL, "en_GB.utf8") # TODO: set differently ?
+        setlocale(LC_ALL, "en_GB.utf8") # TODO: move into parser state
         while True:
             ret = self.readline()
             if ret:
@@ -462,14 +498,16 @@ cdef class Parser:
                 #print(f"SNIPPET '{self.snippet_start.cstr.ptr}' from {self.snippet_start.line_num}-{self.snippet_end.line_num}")
                 # TODO: run snippet code, write in the results here
                 # TODO: also - expand output to be aligned with snippet indentation
+                with gil:
+                    self.expand_snippet(cb)
                 break  # Done, go back to outer state
 
-    def parse(self, fname_src: str, fname_dst: t.Optional[str]):
+    def parse(self, cb: snippet_cb, fname_src: str, fname_dst: t.Optional[str]):
         cdef PARSE_RES res = PARSE_OK
         self.reset(fname_src, fname_dst)
 
         try:
-            res = self.doparse()
+            res = self.doparse(<c_snippet_cb>cb)
             if res != PARSE_OK:
                 return parse_result_err(res)
         finally:

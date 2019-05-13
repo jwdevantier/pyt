@@ -2,6 +2,7 @@
 from libc.stdio cimport FILE
 import typing as t
 ctypedef Py_UNICODE wchar_t
+from pyt.protocols import IWriter
 
 # cdef class CString:
 #     cdef size_t buflen
@@ -30,6 +31,8 @@ cdef struct snippet:
     SNIPPET_TYPE type
     size_t line_num
 
+snippet_cb = t.Callable[[t.Dict[str, t.Any], IWriter, str], None]
+ctypedef void* c_snippet_cb
 
 cdef class Parser:
     # file handlers for input and output files
@@ -60,5 +63,6 @@ cdef class Parser:
     cdef int snippet_find(self, snippet* dst) nogil
     cdef int readline(self) nogil
     cdef int writeline(self) nogil
-    cdef unsigned int doparse(self) nogil
+    cdef void expand_snippet(self, c_snippet_cb f)
+    cdef unsigned int doparse(self, c_snippet_cb f) nogil
 
