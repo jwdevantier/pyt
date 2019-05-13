@@ -7,7 +7,7 @@ import tempfile
 import os
 import typing as t
 
-# C api docs: https://devdocs.io/c/io/fopen
+# C api docs: https://devdocs.io/c/
 
 ################################################################################
 ## DEFINITIONS
