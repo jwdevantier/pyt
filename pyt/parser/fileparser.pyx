@@ -24,7 +24,6 @@ cdef extern from "stdio.h" nogil:
     char *strstr(const char *haystack, const char *needle)
 
 cdef extern from "wchar.h" nogil:
-    # ctypedef Py_UNICODE wchar_t
     wchar_t *fgetws(wchar_t *buf, int count, FILE *stream)
     wchar_t *wcsstr(const wchar_t *haystack, const wchar_t *needle);
     wchar_t *wcscpy(wchar_t *dest, const wchar_t *src)
@@ -221,6 +220,16 @@ cdef class FileWriter:
         cdef FileWriter w = FileWriter.__new__(FileWriter)
         w.out = fh
         return w
+
+################################################################################
+## Context
+################################################################################
+cdef class Context:
+    def __init__(self, cb: snippet_cb, src: str, dst: str):
+        self.src = src
+        self.dst = dst
+        self.env = {}
+        self.on_snippet = <c_snippet_cb>cb
 
 ################################################################################
 ## Parser
@@ -459,13 +468,11 @@ cdef class Parser:
             return -1
         return 0
 
-    cdef void expand_snippet(self, c_snippet_cb f):
+    cdef void expand_snippet(self, Context ctx):
         cdef FileWriter fw = FileWriter.from_handle(self.fh_out)
-        env = {}  # TODO: change - should persist across calls
-        print("RUNNING SNIPPET EXPAND")
-        (<object>f)(env, fw, "example.file")  # TODO: keep filename around
+        (<object>ctx.on_snippet)(ctx, fw)
 
-    cdef PARSE_RES doparse(self, c_snippet_cb cb) nogil:
+    cdef PARSE_RES doparse(self, Context ctx) nogil:
         cdef int ret = READ_OK
         setlocale(LC_ALL, "en_GB.utf8") # TODO: move into parser state
         while True:
@@ -499,15 +506,16 @@ cdef class Parser:
                 # TODO: run snippet code, write in the results here
                 # TODO: also - expand output to be aligned with snippet indentation
                 with gil:
-                    self.expand_snippet(cb)
+                    self.expand_snippet(ctx)
                 break  # Done, go back to outer state
 
     def parse(self, cb: snippet_cb, fname_src: str, fname_dst: t.Optional[str]):
         cdef PARSE_RES res = PARSE_OK
+        cdef Context ctx = Context(cb, fname_src, fname_dst)
         self.reset(fname_src, fname_dst)
 
         try:
-            res = self.doparse(<c_snippet_cb>cb)
+            res = self.doparse(ctx)
             if res != PARSE_OK:
                 return parse_result_err(res)
         finally:

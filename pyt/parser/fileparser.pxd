@@ -1,20 +1,9 @@
 # cython: language_level=3
 from libc.stdio cimport FILE
 import typing as t
-ctypedef Py_UNICODE wchar_t
 from pyt.protocols import IWriter
 
-# cdef class CString:
-#     cdef size_t buflen
-#     cdef wchar_t *ptr
-#     cdef size_t strlen
-#
-#
-#     cdef int ncpy_wchar(self, wchar_t *src, size_t n)
-#     cdef int ncpy_unicode(self, unicode s, size_t n)
-#     cdef void reset(self)
-#     cdef size_t len(self)
-#     cdef unicode repr(self)
+ctypedef Py_UNICODE wchar_t
 
 cdef struct cstr:
     size_t buflen
@@ -31,7 +20,8 @@ cdef struct snippet:
     SNIPPET_TYPE type
     size_t line_num
 
-snippet_cb = t.Callable[[t.Dict[str, t.Any], IWriter, str], None]
+snippet_cb = t.Callable[[Context, IWriter], None]
+
 ctypedef void* c_snippet_cb
 
 cdef class Parser:
@@ -63,6 +53,11 @@ cdef class Parser:
     cdef int snippet_find(self, snippet* dst) nogil
     cdef int readline(self) nogil
     cdef int writeline(self) nogil
-    cdef void expand_snippet(self, c_snippet_cb f)
-    cdef unsigned int doparse(self, c_snippet_cb f) nogil
+    cdef void expand_snippet(self, Context ctx)
+    cdef unsigned int doparse(self, Context ctx) nogil
 
+cdef class Context:
+    cdef readonly wchar_t *src
+    cdef readonly wchar_t *dst
+    cpdef readonly dict env
+    cdef c_snippet_cb on_snippet
