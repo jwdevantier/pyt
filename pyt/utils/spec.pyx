@@ -408,7 +408,7 @@ cdef class Req(_Spec):
     cdef str name(self):
         return f"Req<{self.spec.name()}>"
 
-def req(Spec spec) -> Req:
+def req(_Spec spec) -> Req:
     return Req(spec)
 
 cdef class Opt(_Spec):
