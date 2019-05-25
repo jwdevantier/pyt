@@ -54,3 +54,4 @@ cdef class Req(_Spec):
 
 cdef class Opt(_Spec):
     cdef Spec spec
+    cdef object default

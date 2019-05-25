@@ -418,8 +418,12 @@ def req(Spec spec) -> Req:
     return Req(spec)
 
 cdef class Opt(_Spec):
-    def __init__(self, _Spec spec):
+    def __init__(self, _Spec spec, object default):
         self.spec = spec
+        if default is not None and not spec.valid(default):
+            #raise ValueError("non-None default must validate against given Spec")
+            raise ValueError(f"value '{default}' does not fulfill given Spec")
+        self.default = default
 
     cdef bint valid(self, value):
         if value is None:
@@ -433,14 +437,15 @@ cdef class Opt(_Spec):
 
     cdef object conform(self, value):
         if value is None:
-            return None
+            return self.default
         return self.spec.conform(value)
 
     cdef str name(self):
         return f"Opt<{self.spec.name()}>"
 
-def opt(Spec spec) -> Opt:
-    return Opt(spec)
+def opt(_Spec spec, default = None) -> Opt:
+    return Opt(spec, default)
+
 
 ##################################################################
 

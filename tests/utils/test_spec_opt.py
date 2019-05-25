@@ -40,10 +40,21 @@ class IntSpec(s.Spec):
     ("should be OK - optional value",
      None,
      s.opt(IntSpec()),
-     True)
+     True),
+
+    ('fallback - give regular int',
+     None,
+     s.opt(IntSpec(), 3),
+     True),
 ])
 def test_opt_valid(msg, value, spec, result):
     assert s.valid(spec, value) == result, msg
+
+
+# Cannot create a spec where the default/fallback value does NOT conform to spec
+def test_opt_raise_valueerror():
+    with pytest.raises(ValueError):
+        s.Opt(IntSpec(), "3")
 
 
 ################################################################################
@@ -54,14 +65,21 @@ def test_opt_valid(msg, value, spec, result):
      1,
      IntSpec(),
      None),
+
     ("None is not an int",
      None,
      IntSpec(),
      s.explain(IntSpec(), None)),
+
     ("should be an optional value",
      None,
      s.opt(IntSpec()),
-     None)
+     None),
+
+    ('fallback - give regular int',
+     None,
+     s.opt(IntSpec(), 3),
+     None),
 ])
 def test_opt_explain(msg, value, spec, result):
     assert s.explain(spec, value) == result, msg
@@ -91,6 +109,11 @@ def test_opt_explain(msg, value, spec, result):
     ('can conform 3.3 to 3',
      3.3,
      s.opt(IntSpec()),
+     3),
+
+    ('fallback - give regular int',
+     None,
+     s.opt(IntSpec(), 3),
      3),
 ])
 def test_opt_explain(msg, value, spec, result):
