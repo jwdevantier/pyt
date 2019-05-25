@@ -13,12 +13,6 @@ from collections import Sequence, Mapping
 #       - explain  => ~kinda what's done now (errors map)
 #       - conform  => ~explain + data.
 
-# TODO: 'every' is like s/and
-# TODO: need an 's/or' | 'any'
-# TODO: how about conform ? how might that be implemented?
-# TODO: how about explain? how might that be implemented ?
-# TODO: 'validate' is close to 'valid?', but raises an Exception on error
-
 # TODO
 #   * specify - wrap object in spec
 #       * type => instanceof
@@ -446,6 +440,28 @@ cdef class Opt(_Spec):
 def opt(_Spec spec, default = None) -> Opt:
     return Opt(spec, default)
 
+cdef class InSeq(_Spec):
+    def __init__(self, options: t.Sequence[t.Any]):
+        self.opts = set(options)
+
+    cdef bint valid(self, value: t.Any):
+        return value in self.opts
+
+    cdef object explain(self, value: t.Any):
+        if value not in self.opts:
+            return f"value not in {', '.join(self.opts)}"
+        return None
+
+    cdef object conform(self, value: t.Any):
+        if value in self.opts:
+            return value
+        return Invalid
+
+    cdef str name(self):
+        return f"InSeq<{', '.join(self.opts)}>"
+
+def inseq(seq: t.Sequence[t.Any]) -> InSeq:
+    return InSeq(seq)
 
 ##################################################################
 

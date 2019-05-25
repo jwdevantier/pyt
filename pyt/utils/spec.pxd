@@ -55,3 +55,6 @@ cdef class Req(_Spec):
 cdef class Opt(_Spec):
     cdef Spec spec
     cdef object default
+
+cdef class InSeq(_Spec):
+    cdef set opts
