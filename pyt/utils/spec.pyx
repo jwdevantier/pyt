@@ -128,7 +128,7 @@ cdef class Predicate(_Spec):
 def predicate(c: t.Callable[[t.Any], bool], name: t.Optional[str] = None) -> Predicate:
     return Predicate(c, name)
 
-cdef class All(_Spec):
+cdef class AllOf(_Spec):
     def __init__(self, dict specs: t.Dict[str, _Spec]):
         self.specs = specs
 
@@ -162,10 +162,10 @@ cdef class All(_Spec):
     cdef str name(self):
         return f"all<{', '.join(self.specs.keys())}>"
 
-def all(dict specmap: t.Dict[str, _Spec]) -> All:
-    return All(specmap)
+def allof(dict specmap: t.Dict[str, _Spec]) -> AllOf:
+    return AllOf(specmap)
 
-cdef class Any(_Spec):
+cdef class AnyOf(_Spec):
     def __init__(self, dict specs: t.Dict[str, _Spec]):
         self.specs = specs
 
@@ -206,8 +206,8 @@ cdef class Any(_Spec):
     cdef str name(self):
         return f"any<{', '.join(self.specs.keys())}>"
 
-def any(dict specmap: t.Dict[str, _Spec]) -> Any:
-    return Any(specmap)
+def anyof(dict specmap: t.Dict[str, _Spec]) -> AnyOf:
+    return AnyOf(specmap)
 
 cdef class SeqOf(_Spec):
     def __init__(self, _Spec element_spec: _Spec):

@@ -33,56 +33,43 @@ p_isneg = s.predicate(isneg)
 
 
 ################################################################################
-# All - valid
+# Any - Valid
 ################################################################################
-
 @pytest.mark.parametrize("value,preds,exp", [
     (10, {'int?': p_isint}, True),
     (10, {'pos?': p_ispos}, True),
     (10, {'neg?': p_isneg}, False),
 
-    # multiple specs - one failure => failure
-    (100, {'pos?': p_ispos, 'big?': p_isbig}, True),
-    (-100, {'pos?': p_ispos, 'big?': p_isbig}, False),
-    (100, {'neg?': p_isneg, 'big?': p_isbig}, False),
-    (-100, {'neg?': p_isneg, 'big?': p_isbig}, True),
-
-    # impossible
-    (100, {'pos?': p_ispos, 'neg?': p_isneg}, False)
+    # multiple specs - one success => success
+    (7, {'neg?': p_isneg, 'big?': p_isbig}, False),
+    (-7, {'neg?': p_isneg, 'big?': p_isbig}, True),
+    (17, {'neg?': p_isneg, 'big?': p_isbig}, True),
 ])
-def test_all_valid(value, preds, exp):
-    spec = s.all(preds)
+def test_anyof_valid(value, preds, exp):
+    spec = s.anyof(preds)
     assert s.valid(spec, value) == exp, "unexpected"
 
 
 ################################################################################
-# All - explain
+# Any - Explain
 ################################################################################
-
 @pytest.mark.parametrize("value,preds,exp", [
     (10, {'int?': p_isint}, None),
     (10, {'pos?': p_ispos}, None),
-    (10, {'neg?': p_isneg}, {
+    (10, {"neg?": p_isneg}, {
         'neg?': "predicate 'isneg' failed"
     }),
 
-    # multiple specs - one failure => failure
-    (100, {'pos?': p_ispos, 'big?': p_isbig}, None),
-    (-100, {'pos?': p_ispos, 'big?': p_isbig}, {
-        'pos?': "predicate 'ispos' failed"
+    # multiple specs - one success => success
+    (7, {'neg?': p_isneg, 'big?': p_isbig}, {
+        'neg?': "predicate 'isneg' failed",
+        'big?': "predicate 'isbig' failed"
     }),
-    (100, {'neg?': p_isneg, 'big?': p_isbig}, {
-        'neg?': "predicate 'isneg' failed"
-    }),
-    (-100, {'neg?': p_isneg, 'big?': p_isbig}, None),
-
-    # impossible
-    (100, {'pos?': p_ispos, 'neg?': p_isneg}, {
-        'neg?': "predicate 'isneg' failed"
-    })
+    (-7, {'neg?': p_isneg, 'big?': p_isbig}, None),
+    (17, {'neg?': p_isneg, 'big?': p_isbig}, None),
 ])
-def test_all_explain(value, preds, exp):
-    spec = s.all(preds)
+def test_anyof_explain(value, preds, exp):
+    spec = s.anyof(preds)
     assert s.explain(spec, value) == exp, "unexpected"
 
 # TODO: missing conform

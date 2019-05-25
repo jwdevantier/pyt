@@ -33,10 +33,10 @@ cdef class Predicate(_Spec):
     cdef unicode predicate_name
     cdef object predicate
 
-cdef class All(_Spec):
+cdef class AllOf(_Spec):
     cdef dict specs
 
-cdef class Any(_Spec):
+cdef class AnyOf(_Spec):
     cdef dict specs
 
 cdef class SeqOf(_Spec):
