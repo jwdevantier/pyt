@@ -8,7 +8,7 @@ import typing as t
 # type).
 
 # TODO: move tests using IntSpec out to its own test file.
-class IntSpec(s.Spec):
+class IntSpec(s.SpecBase):
     @staticmethod
     def _valid(value: t.Any):
         return isinstance(value, int)

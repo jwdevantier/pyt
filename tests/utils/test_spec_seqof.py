@@ -8,7 +8,7 @@ p_isstr = s.predicate(lambda v: isinstance(v, str))
 
 
 # TODO: move tests using IntSpec out to its own test file.
-class IntSpec(s.Spec):
+class IntSpec(s.SpecBase):
     @staticmethod
     def _valid(value: t.Any):
         return isinstance(value, int)

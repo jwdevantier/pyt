@@ -23,7 +23,7 @@ cdef class _Spec:
     cdef object conform(self, object value: t.Any)
     cdef str name(self)
 
-cdef class Spec(_Spec):
+cdef class SpecBase(_Spec):
     pass
 
 cdef class Type(_Spec):

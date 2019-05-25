@@ -56,7 +56,7 @@ cdef class _Spec:
     cdef str name(self):
         return self.__repr__()
 
-cdef class Spec(_Spec):
+cdef class SpecBase(_Spec):
     cdef bint valid(self, object value: t.Any):
         return self._valid(value)
 

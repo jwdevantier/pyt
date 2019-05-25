@@ -3,7 +3,7 @@ from pyt.utils import spec as s
 import typing as t
 
 
-class IntSpec(s.Spec):
+class IntSpec(s.SpecBase):
     @staticmethod
     def _valid(value: t.Any):
         return isinstance(value, int)
