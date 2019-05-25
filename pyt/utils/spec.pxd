@@ -8,53 +8,44 @@
 # file:///home/pseud/repos/codegen/pyt/pyt/utils/spec.html
 import typing as t
 
-# cdef class Spec:
-#     cdef bint valid(self, value: t.Any)
-#     cdef object explain(self, value: t.Any)
-#     cdef object conform(self, value: t.Any)
-#     cdef str name(self)
-#
-# cdef class XSpec(Spec):
-#     pass
-
-cdef class _Spec:
+cdef class Spec:
     cdef bint valid(self, object value: t.Any)
     cdef object explain(self, object value: t.Any)
     cdef object conform(self, object value: t.Any)
     cdef str name(self)
 
-cdef class SpecBase(_Spec):
+cdef class SpecBase(Spec):
     pass
 
-cdef class Type(_Spec):
+cdef class Type(Spec):
     cdef type typ
 
-cdef class Predicate(_Spec):
+cdef class Predicate(Spec):
     cdef unicode predicate_name
     cdef object predicate
 
-cdef class AllOf(_Spec):
+cdef class AllOf(Spec):
     cdef dict specs
 
-cdef class AnyOf(_Spec):
+cdef class AnyOf(Spec):
     cdef dict specs
 
-cdef class SeqOf(_Spec):
-    cdef _Spec element_spec
+cdef class SeqOf(Spec):
+    cdef Spec element_spec
 
-cdef class MapOf(_Spec):
-    cdef _Spec key_spec
-    cdef _Spec val_spec
+cdef class MapOf(Spec):
+    cdef Spec key_spec
+    cdef Spec val_spec
 
-cdef class Keys(_Spec):
+cdef class Keys(Spec):
     cdef dict spec
 
-cdef class Req(_Spec):
+cdef class Req(Spec):
     cdef Spec spec
 
-cdef class Opt(_Spec):
+cdef class Opt(Spec):
     cdef Spec spec
     cdef object default
 
-cdef class InSeq(_Spec):
+cdef class InSeq(Spec):
     cdef set opts

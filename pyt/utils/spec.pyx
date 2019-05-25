@@ -43,7 +43,7 @@ cdef class _Invalid:
 
 Invalid = _Invalid()
 
-cdef class _Spec:
+cdef class Spec:
     cdef bint valid(self, object value):
         raise NotImplementedError("valid is not implemented")
 
@@ -56,7 +56,7 @@ cdef class _Spec:
     cdef str name(self):
         return self.__repr__()
 
-cdef class SpecBase(_Spec):
+cdef class SpecBase(Spec):
     cdef bint valid(self, object value: t.Any):
         return self._valid(value)
 
@@ -69,7 +69,7 @@ cdef class SpecBase(_Spec):
     cdef str name(self):
         return self._name()
 
-cdef class Type(_Spec):
+cdef class Type(Spec):
     def __init__(self, type t: t.Type):
         self.typ = t
 
@@ -89,12 +89,12 @@ cdef class Type(_Spec):
     cdef str name(self):
         return f"Type<{self.typ.__name__}>"
 
-def typ(o: t.Type) -> _Spec:
+def typ(o: t.Type) -> Spec:
     if not isinstance(o, type):
         raise ValueError("argument should be a type")
     return Type(o)
 
-cdef class Predicate(_Spec):
+cdef class Predicate(Spec):
     def __init__(self, predicate : t.Callable, name: t.Optional[str] = None):
         self.predicate = predicate
         if name is None:
@@ -128,12 +128,12 @@ cdef class Predicate(_Spec):
 def predicate(c: t.Callable[[t.Any], bool], name: t.Optional[str] = None) -> Predicate:
     return Predicate(c, name)
 
-cdef class AllOf(_Spec):
-    def __init__(self, dict specs: t.Dict[str, _Spec]):
+cdef class AllOf(Spec):
+    def __init__(self, dict specs: t.Dict[str, Spec]):
         self.specs = specs
 
     cdef bint valid(self, object value: t.Any):
-        cdef _Spec spec
+        cdef Spec spec
         for spec in self.specs.values():
             if not spec.valid(value):
                 return False
@@ -143,7 +143,7 @@ cdef class AllOf(_Spec):
         cdef:
             dict errors = {}
             object s_errs = None
-            _Spec spec
+            Spec spec
         for label, spec in self.specs.items():
             s_errs = spec.explain(value)
             if s_errs:
@@ -153,7 +153,7 @@ cdef class AllOf(_Spec):
         return errors
 
     cdef object conform(self, object value: t.Any):
-        cdef _Spec spec
+        cdef Spec spec
         for spec in self.specs.values():
             if spec.conform(value) == Invalid:
                 return Invalid
@@ -162,16 +162,16 @@ cdef class AllOf(_Spec):
     cdef str name(self):
         return f"all<{', '.join(self.specs.keys())}>"
 
-def allof(dict specmap: t.Dict[str, _Spec]) -> AllOf:
+def allof(dict specmap: t.Dict[str, Spec]) -> AllOf:
     return AllOf(specmap)
 
-cdef class AnyOf(_Spec):
-    def __init__(self, dict specs: t.Dict[str, _Spec]):
+cdef class AnyOf(Spec):
+    def __init__(self, dict specs: t.Dict[str, Spec]):
         self.specs = specs
 
     cdef bint valid(self, object value: t.Any):
         cdef:
-            _Spec spec
+            Spec spec
         for spec in self.specs.values():
             if spec.valid(value):
                 return True
@@ -181,7 +181,7 @@ cdef class AnyOf(_Spec):
         cdef:
             dict errors = {}
             object s_errs = None
-            _Spec spec
+            Spec spec
             str label
         for label, spec in self.specs.items():
             s_errs = spec.explain(value)
@@ -194,7 +194,7 @@ cdef class AnyOf(_Spec):
 
     cdef object conform(self, object value: t.Any):
         cdef:
-            _Spec spec
+            Spec spec
             str label
             object retval
         for label, spec in self.specs.items():
@@ -206,11 +206,11 @@ cdef class AnyOf(_Spec):
     cdef str name(self):
         return f"any<{', '.join(self.specs.keys())}>"
 
-def anyof(dict specmap: t.Dict[str, _Spec]) -> AnyOf:
+def anyof(dict specmap: t.Dict[str, Spec]) -> AnyOf:
     return AnyOf(specmap)
 
-cdef class SeqOf(_Spec):
-    def __init__(self, _Spec element_spec: _Spec):
+cdef class SeqOf(Spec):
+    def __init__(self, Spec element_spec: Spec):
         self.element_spec = element_spec
 
     cdef bint valid(self, object value: t.Any):
@@ -253,11 +253,11 @@ cdef class SeqOf(_Spec):
     cdef str name(self):
         return f"seq-of<{self.element_spec.name()}>"
 
-def seqof(_Spec element_spec: _Spec) -> SeqOf:
+def seqof(Spec element_spec: Spec) -> SeqOf:
     return SeqOf(element_spec)
 
-cdef class MapOf(_Spec):
-    def __init__(self, _Spec keyspec: _Spec, _Spec valspec: _Spec):
+cdef class MapOf(Spec):
+    def __init__(self, Spec keyspec: Spec, Spec valspec: Spec):
         self.key_spec = keyspec
         self.val_spec = valspec
 
@@ -283,8 +283,8 @@ cdef class MapOf(_Spec):
             object err
             dict errs = {}
             dict entry_errs
-            _Spec key_spec = self.key_spec
-            _Spec val_spec = self.val_spec
+            Spec key_spec = self.key_spec
+            Spec val_spec = self.val_spec
         for key, val in value.items():
             entry_errs = {}
             err = key_spec.explain(key)
@@ -308,8 +308,8 @@ cdef class MapOf(_Spec):
             object val
             object val_conformed
             dict conformed = {}
-            _Spec key_spec = self.key_spec
-            _Spec val_spec = self.val_spec
+            Spec key_spec = self.key_spec
+            Spec val_spec = self.val_spec
         for key, val in value.items():
             key_conformed = key_spec.conform(key)
             if key_conformed == Invalid:
@@ -323,11 +323,11 @@ cdef class MapOf(_Spec):
     cdef str name(self):
         return f"map-of<{self.key_spec.name()}: {self.val_spec.name()}>"
 
-def mapof(_Spec keyspec: _Spec, _Spec valspec: _Spec) -> MapOf:
+def mapof(Spec keyspec: Spec, Spec valspec: Spec) -> MapOf:
     return MapOf(keyspec, valspec)
 
-cdef class Keys(_Spec):
-    def __init__(self, dict spec: t.Dict[t.Any, _Spec]):
+cdef class Keys(Spec):
+    def __init__(self, dict spec: t.Dict[t.Any, Spec]):
         self.spec = spec
 
     cdef bint valid(self, value):
@@ -335,7 +335,7 @@ cdef class Keys(_Spec):
             return False
         cdef:
             object key
-            _Spec spec
+            Spec spec
         for key, spec in self.spec.items():
             if key not in value:
                 if isinstance(spec, Req):
@@ -352,7 +352,7 @@ cdef class Keys(_Spec):
             dict errors = {}
             object errs
             object key
-            _Spec spec
+            Spec spec
         for key, spec in self.spec.items():
             if key not in value:
                 if isinstance(spec, Req):
@@ -371,7 +371,7 @@ cdef class Keys(_Spec):
         cdef:
             dict result = {}
             object key
-            _Spec spec
+            Spec spec
 
         for key, spec in self.spec.items():
             if not key in value:
@@ -389,11 +389,11 @@ cdef class Keys(_Spec):
         cdef dict out = {key: spec.name() for key, spec in self.spec.items()}
         return f"keys<{out}>"
 
-def keys(dict spec: t.Dict[t.Any, _Spec]) -> Keys:
+def keys(dict spec: t.Dict[t.Any, Spec]) -> Keys:
     return Keys(spec)
 
-cdef class Req(_Spec):
-    def __init__(self, _Spec spec):
+cdef class Req(Spec):
+    def __init__(self, Spec spec):
         self.spec = spec
 
     cdef bint valid(self, value):
@@ -408,11 +408,11 @@ cdef class Req(_Spec):
     cdef str name(self):
         return f"Req<{self.spec.name()}>"
 
-def req(_Spec spec) -> Req:
+def req(Spec spec) -> Req:
     return Req(spec)
 
-cdef class Opt(_Spec):
-    def __init__(self, _Spec spec, object default):
+cdef class Opt(Spec):
+    def __init__(self, Spec spec, object default):
         self.spec = spec
         if default is not None and not spec.valid(default):
             #raise ValueError("non-None default must validate against given Spec")
@@ -437,10 +437,10 @@ cdef class Opt(_Spec):
     cdef str name(self):
         return f"Opt<{self.spec.name()}>"
 
-def opt(_Spec spec, default = None) -> Opt:
+def opt(Spec spec, default = None) -> Opt:
     return Opt(spec, default)
 
-cdef class InSeq(_Spec):
+cdef class InSeq(Spec):
     def __init__(self, options: t.Sequence[t.Any]):
         self.opts = set(options)
 
@@ -463,7 +463,7 @@ cdef class InSeq(_Spec):
 def inseq(seq: t.Sequence[t.Any]) -> InSeq:
     return InSeq(seq)
 
-cdef class Any(_Spec):
+cdef class Any(Spec):
     def __init__(self):
         pass
 
@@ -482,11 +482,11 @@ def any() -> Any:
 ##################################################################
 
 
-def valid(spec: _Spec, object value: t.Any) -> bool:
+def valid(spec: Spec, object value: t.Any) -> bool:
     return spec.valid(value)
 
-def conform(spec: _Spec, object value: t.Any) -> t.Any:
+def conform(spec: Spec, object value: t.Any) -> t.Any:
     return spec.conform(value)
 
-def explain(spec: _Spec, object value: t.Any) -> t.Any:
+def explain(spec: Spec, object value: t.Any) -> t.Any:
     return spec.explain(value)
