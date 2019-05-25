@@ -463,6 +463,22 @@ cdef class InSeq(_Spec):
 def inseq(seq: t.Sequence[t.Any]) -> InSeq:
     return InSeq(seq)
 
+cdef class Any(_Spec):
+    def __init__(self):
+        pass
+
+    cdef bint valid(self, value):
+        return True
+
+    cdef object explain(self, value):
+        return None
+
+    cdef object conform(self, value):
+        return value
+
+def any() -> Any:
+    return Any()
+
 ##################################################################
 
 
