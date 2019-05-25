@@ -41,7 +41,7 @@ class StrSpec(s.Spec):
 
     @staticmethod
     def _name():
-        return "Int"
+        return "Str"
 
 
 ################################################################################
@@ -55,7 +55,7 @@ class StrSpec(s.Spec):
     ({"1": 1}, True),
     ({"1": 1, "2": 2}, True),
 ])
-def test_any_valid(value, exp):
+def test_mapof_valid(value, exp):
     spec = s.mapof(StrSpec(), IntSpec())
     assert s.valid(spec, value) == exp, "unexpected"
 
@@ -75,7 +75,7 @@ def test_any_valid(value, exp):
             'value': s.explain(IntSpec(), 2.2)}
     })
 ])
-def test_any_explain(value, exp):
+def test_mapof_explain(value, exp):
     spec = s.mapof(StrSpec(), IntSpec())
     assert s.explain(spec, value) == exp, "unexpected"
 
@@ -90,6 +90,6 @@ def test_any_explain(value, exp):
     ("hello", s.Invalid),
     ({"1": "oops"}, s.Invalid),
 ])
-def test_any_conform(value, exp):
+def test_mapof_conform(value, exp):
     spec = s.mapof(StrSpec(), IntSpec())
     assert s.conform(spec, value) == exp, "unexpected"
