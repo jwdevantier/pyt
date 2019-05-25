@@ -76,7 +76,7 @@ cdef class Spec(_Spec):
         return self._name()
 
 cdef class Type(_Spec):
-    def __init__(self, t: t.Type):
+    def __init__(self, type t: t.Type):
         self.typ = t
 
     cdef bint valid(self, object value: t.Any):
@@ -85,7 +85,7 @@ cdef class Type(_Spec):
     cdef object explain(self, object value: t.Any):
         if isinstance(value, self.typ):
             return None
-        return f"expected type '{self.typ}', got '{type(value)}'"
+        return f"expected instance of '{self.typ.__name__}', got '{type(value).__name__}'"
 
     cdef object conform(self, object value: t.Any):
         if isinstance(value, self.typ):
@@ -93,7 +93,7 @@ cdef class Type(_Spec):
         return Invalid
 
     cdef str name(self):
-        return f"<{self.typ.__name__}>"  #TODO improve (?)
+        return f"Type<{self.typ.__name__}>"
 
 def typ(o: t.Type) -> _Spec:
     if not isinstance(o, type):

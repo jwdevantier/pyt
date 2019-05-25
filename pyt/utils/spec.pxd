@@ -27,7 +27,7 @@ cdef class Spec(_Spec):
     pass
 
 cdef class Type(_Spec):
-    cdef object typ
+    cdef type typ
 
 cdef class Predicate(_Spec):
     cdef unicode predicate_name
