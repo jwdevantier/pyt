@@ -45,7 +45,7 @@ class AB(A, B):
      AB(), B, True)
 ])
 def test_typ_valid(msg, value, typ, result):
-    assert s.valid(s.typ(typ), value) == result, msg
+    assert s.valid(s.type(typ), value) == result, msg
 
 
 ################################################################################
@@ -73,7 +73,7 @@ def test_typ_valid(msg, value, typ, result):
      None)
 ])
 def test_typ_explain(msg, value, typ, result):
-    assert s.explain(s.typ(typ), value) == result, msg
+    assert s.explain(s.type(typ), value) == result, msg
 
 
 ################################################################################
@@ -107,4 +107,4 @@ oAB = AB()
      oAB)
 ])
 def test_typ_explain(msg, value, typ, result):
-    assert s.conform(s.typ(typ), value) == result, msg
+    assert s.conform(s.type(typ), value) == result, msg

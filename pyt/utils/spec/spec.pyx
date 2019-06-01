@@ -4,45 +4,6 @@ from copy import copy
 from collections import Sequence, Mapping
 
 # Inspiration: https://clojure.org/guides/spec
-
-# Ideas
-# 1) rewrite in Cython (SPEEEEED!)
-# 2) implement basics (and, or)
-# 3) implement basic operations
-#       - validate => boolean (maybe exception)
-#       - explain  => ~kinda what's done now (errors map)
-#       - conform  => ~explain + data.
-
-# TODO
-#   * specify - wrap object in spec
-#       * type => instanceof
-#       * callable => predicate
-#   * predicate - wrap single-arg function, expect Truthy
-#       * [DONE]
-#   * all - require all specs conform
-#       * [DONE]
-#   * any   - require that one/some spec conforms
-#       * [DONE]
-#   * type/isinstance -
-#       * [DONE]
-#   * seqof - seq of objs
-#       * [DONE]
-#   * mapof - mapping of key=>val
-#       * [DONE]
-#   * keys  - mapping w specified keys conforming to specified specs
-#       * [DONE]
-#   * required - used for mappings where keys aren't optional
-#       * [DONE]
-#   * null/optional
-#       * [DONE]
-#   * in -- element membership test...
-#       * [DONE]
-#   * base types (+ tests) - str, bool, int, float
-#   * any -- the escape-hatch
-#       * [DONE]
-#   * Refactor _Spec / Spec to something nicer.. (_Spec=>Spec and Spec=>SpecBase) ?
-#       * [DONE]
-
 # Like clojure spec, dicts etc are OPEN
 
 cdef class _Invalid:
