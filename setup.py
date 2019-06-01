@@ -17,6 +17,6 @@ def find_files(rgx: str) -> t.List[str]:
 setup(
     ext_modules=cythonize([
         Extension("pyt.parser.fileparser", ["pyt/parser/fileparser.pyx"]),
-        Extension("pyt.utils.spec", ["pyt/utils/spec.pyx"])
+        Extension("pyt.utils.spec.spec", ["pyt/utils/spec/spec.pyx"])
     ], annotate=True)
 )

@@ -22,7 +22,7 @@ from pyt.utils import spec as s
      False),
 ])
 def test_inseq_valid(msg, value, seq, result):
-    assert s.valid(s.InSeq(seq), value) == result, msg
+    assert s.valid(s.inseq(seq), value) == result, msg
 
 
 ################################################################################
@@ -43,7 +43,7 @@ def test_inseq_valid(msg, value, seq, result):
      "value not in"),
 ])
 def test_inseq_explain(msg, value, seq, errmsg):
-    out = s.explain(s.InSeq(seq), value)
+    out = s.explain(s.inseq(seq), value)
     if errmsg:
         assert errmsg in out, msg
     else:
@@ -68,4 +68,4 @@ def test_inseq_explain(msg, value, seq, errmsg):
      s.Invalid),
 ])
 def test_inseq_conform(msg, value, seq, result):
-    assert s.conform(s.InSeq(seq), value) == result, msg
+    assert s.conform(s.inseq(seq), value) == result, msg

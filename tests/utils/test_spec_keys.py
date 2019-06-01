@@ -41,7 +41,7 @@ class StrSpec(s.SpecBase):
 
     @staticmethod
     def _name():
-        return "Int"
+        return "Str"
 
 
 ################################################################################

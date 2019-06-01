@@ -54,7 +54,7 @@ def test_opt_valid(msg, value, spec, result):
 # Cannot create a spec where the default/fallback value does NOT conform to spec
 def test_opt_raise_valueerror():
     with pytest.raises(ValueError):
-        s.Opt(IntSpec(), "3")
+        s.opt(IntSpec(), "3")
 
 
 ################################################################################

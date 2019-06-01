@@ -34,6 +34,14 @@ from collections import Sequence, Mapping
 #   * required - used for mappings where keys aren't optional
 #       * [DONE]
 #   * null/optional
+#       * [DONE]
+#   * in -- element membership test...
+#       * [DONE]
+#   * base types (+ tests) - str, bool, int, float
+#   * any -- the escape-hatch
+#       * [DONE]
+#   * Refactor _Spec / Spec to something nicer.. (_Spec=>Spec and Spec=>SpecBase) ?
+#       * [DONE]
 
 # Like clojure spec, dicts etc are OPEN
 
@@ -70,7 +78,7 @@ cdef class SpecBase(Spec):
         return self._name()
 
 cdef class Type(Spec):
-    def __init__(self, type t: t.Type):
+    def __init__(self, type t: type):
         self.typ = t
 
     cdef bint valid(self, object value: t.Any):
@@ -479,7 +487,85 @@ cdef class Any(Spec):
 def any() -> Any:
     return Any()
 
-##################################################################
+################################################################################
+# Base Types
+################################################################################
+_int = int
+cdef class Int(Spec):
+    cdef bint valid(self, value: t.Any):
+        return isinstance(value, int)
+
+    cdef object explain(self, value: t.Any):
+        if not isinstance(value, int):
+            return f"expected 'int', got '{type(value)}'"
+
+    cdef object conform(self, value: t.Any):
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return Invalid
+
+    cdef str name(self):
+        return "Int"
+
+int = Int()
+
+cdef class _Float(Spec):
+    cdef bint valid(self, value: t.Any):
+        return isinstance(value, int)
+
+    cdef object explain(self, value: t.Any):
+        if not isinstance(value, int):
+            return f"expected 'float', got '{type(value)}'"
+
+    cdef object conform(self, value: t.Any):
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return Invalid
+
+    cdef str name(self):
+        return "Float"
+
+Float = _Float()
+
+cdef class _StrSpec(Spec):
+    cdef bint valid(self, value: t.Any):
+        return isinstance(value, str)
+
+    cdef object explain(self, value: t.Any):
+        if not isinstance(value, str):
+            return f"expected 'str', got '{type(value).__name__}'"
+
+    cdef object conform(self, value: t.Any):
+        return str(value)
+
+    cdef str name(self):
+        return "Str"
+
+Str = _StrSpec()
+
+cdef class _Bool(Spec):
+    cdef bint valid(self, value: t.Any):
+        return isinstance(value, bool)
+
+    cdef object explain(self, value: t.Any):
+        if not isinstance(value, bool):
+            return f"expected 'bool', got '{type(value)}'"
+
+    cdef object conform(self, value: t.Any):
+        try:
+            return bool(value)
+        except (ValueError, TypeError):
+            return Invalid
+
+    cdef str name(self):
+        return "Bool"
+
+Bool = _Bool()
+
+
+################################################################################
 
 
 def valid(spec: Spec, object value: t.Any) -> bool:
