@@ -488,16 +488,18 @@ def any() -> Any:
     return Any()
 
 ################################################################################
-# Base Types
+# Base Types -- exported in spec/__init__.py
 ################################################################################
-_int = int
+# All of these types are aliased in spec/__init__.py because they shadow
+# built-in functionality.
+
 cdef class Int(Spec):
     cdef bint valid(self, value: t.Any):
         return isinstance(value, int)
 
     cdef object explain(self, value: t.Any):
         if not isinstance(value, int):
-            return f"expected 'int', got '{type(value)}'"
+            return f"expected 'int', got '{type(value).__name__}'"
 
     cdef object conform(self, value: t.Any):
         try:
@@ -508,15 +510,13 @@ cdef class Int(Spec):
     cdef str name(self):
         return "Int"
 
-int = Int()
-
-cdef class _Float(Spec):
+cdef class Float(Spec):
     cdef bint valid(self, value: t.Any):
-        return isinstance(value, int)
+        return isinstance(value, float)
 
     cdef object explain(self, value: t.Any):
-        if not isinstance(value, int):
-            return f"expected 'float', got '{type(value)}'"
+        if not isinstance(value, float):
+            return f"expected 'float', got '{type(value).__name__}'"
 
     cdef object conform(self, value: t.Any):
         try:
@@ -527,9 +527,7 @@ cdef class _Float(Spec):
     cdef str name(self):
         return "Float"
 
-Float = _Float()
-
-cdef class _StrSpec(Spec):
+cdef class Str(Spec):
     cdef bint valid(self, value: t.Any):
         return isinstance(value, str)
 
@@ -543,15 +541,13 @@ cdef class _StrSpec(Spec):
     cdef str name(self):
         return "Str"
 
-Str = _StrSpec()
-
-cdef class _Bool(Spec):
+cdef class Bool(Spec):
     cdef bint valid(self, value: t.Any):
         return isinstance(value, bool)
 
     cdef object explain(self, value: t.Any):
         if not isinstance(value, bool):
-            return f"expected 'bool', got '{type(value)}'"
+            return f"expected 'bool', got '{type(value).__name__}'"
 
     cdef object conform(self, value: t.Any):
         try:
@@ -561,8 +557,6 @@ cdef class _Bool(Spec):
 
     cdef str name(self):
         return "Bool"
-
-Bool = _Bool()
 
 
 ################################################################################
