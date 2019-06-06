@@ -480,9 +480,10 @@ cdef class Parser:
             if ret:
                 break
 
+            if self.writeline() != 0:
+                return PARSE_WRITE_ERR
+            # line written to new file - if not a snippet start - skip to next
             if self.snippet_find(self.snippet_start) != 0:
-                if self.writeline() != 0:
-                    return PARSE_WRITE_ERR
                 continue
             if self.snippet_start.type != SNIPPET_OPEN:
                 return PARSE_EXPECTED_SNIPPET_OPEN
@@ -507,6 +508,8 @@ cdef class Parser:
                 # TODO: also - expand output to be aligned with snippet indentation
                 with gil:
                     self.expand_snippet(ctx)
+                if self.writeline() != 0:
+                    return PARSE_WRITE_ERR
                 break  # Done, go back to outer state
 
     def parse(self, cb: snippet_cb, fname_src: str, fname_dst: t.Optional[str]):
