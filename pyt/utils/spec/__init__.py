@@ -1,5 +1,6 @@
 from .spec import (
     Invalid,
+    Spec,
     SpecBase,
     predicate,
     allof,
