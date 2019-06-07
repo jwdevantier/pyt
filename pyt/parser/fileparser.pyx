@@ -2,7 +2,7 @@
 from libc.stdlib cimport malloc, free, realloc
 from libc.string cimport memcpy
 from libc.locale cimport setlocale, LC_ALL
-from libc.stdio cimport (fopen, fclose, fwrite, fflush, feof, perror, FILE)
+from libc.stdio cimport (fopen, fclose, fwrite, fflush, feof, perror, FILE, fseek, fread)
 import tempfile
 import os
 import typing as t
@@ -15,7 +15,8 @@ import typing as t
 
 cdef:
     const char *FILE_READ = 'rb'
-    const char *FILE_WRITE = 'wb'
+    const char *FILE_WRITE = 'wb+'
+    wchar_t NEWLINE = '\n'
 
 ctypedef unsigned int wint_t
 DEF PARSER_LINEBUF_SIZ = 512
@@ -485,9 +486,18 @@ cdef class Parser:
         return 0
 
     cdef void expand_snippet(self, Context ctx):
+        cdef wchar_t buf = '\0'
         cdef FileWriter fw = FileWriter.from_handle(self.fh_out)
         cdef str prefix = self.snippet_indent.ptr
         (<object>ctx.on_snippet)(ctx, prefix, fw)
+
+        # ensure snippet ends with a newline
+        # (so that snippet end line is printed properly)
+        fseek(self.fh_out, -sizeof(wchar_t), 1)
+        fread(&buf, sizeof(wchar_t), 1, self.fh_out)
+        if buf != '\n':
+            fwrite(&NEWLINE, sizeof(wchar_t), 1, self.fh_out)
+
 
     cdef PARSE_RES doparse(self, Context ctx) nogil:
         cdef int ret = READ_OK
