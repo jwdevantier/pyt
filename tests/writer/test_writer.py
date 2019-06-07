@@ -63,12 +63,12 @@ def test_advanced():
         elif typ == "char":
             typ = "String"
         ccField = camel_case(field)
-        fw.writeln(f"int {ccField};")
-        w.writeln_r(f"public void {camel_case('set_' + field)}({typ} {ccField}) " + "{")
+        fw.writeln(f"{typ} {ccField};")
+        w.writeln_r(f"public void {camel_case('set_' + field)}({typ} {ccField}) {{")
         w.writeln(f"this.{ccField} = {ccField};")
         w.writeln_l("}")
         w.writeln("")
-        w.writeln_r(f"public {typ} {camel_case('get_' + field)}() " + "{")
+        w.writeln_r(f"public {typ} {camel_case('get_' + field)}() {{")
         w.writeln(f"return this.{ccField};")
         w.writeln_l("}")
 
@@ -94,9 +94,9 @@ package org.example.acmecorp;
 
 public class Order {
    int id;
-   int customerId;
-   int dateOfPurchase;
-   
+   String customerId;
+   Datetime dateOfPurchase;
+
    public void setId(int id) {
       this.id = id;
    }

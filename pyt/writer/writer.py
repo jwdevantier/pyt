@@ -32,10 +32,9 @@ def natint(_, attribute, value):
 
 @attr.s
 class Writer:
+    _prefix = attr.ib(default='', type=str)
     # base indentation level for the whole block
-    _indents = attr.ib(default=0, type=int, validator=natint)
-    # minimal indentation level - will be set to starting level
-    _indents_min = attr.ib(init=False, type=int)
+    _indents = attr.ib(init=False, default=0, type=int, validator=natint)
     # add this as prefix when indenting lines
     _indent_by = attr.ib(default=' ', type=str)
     # all the written content
@@ -43,14 +42,11 @@ class Writer:
     # temporary buffer - holds at most a single line
     _buf = attr.ib(init=False, repr=False, factory=StringIO)
 
-    def __attrs_post_init__(self):
-        self._indents_min = self._indents
-
     def indent(self):
         self._indents += 1
 
     def dedent(self):
-        if self._indents > self._indents_min:
+        if self._indents > 0:
             self._indents -= 1
         else:
             raise RuntimeError("cannot dedent past initial indentation level")
@@ -81,24 +77,23 @@ class Writer:
 
     def writeln_l(self, s):
         self._indents -= 1
-        if self._indents < self._indents_min:
+        if self._indents < 0:
             raise RuntimeError("cannot dedent past initial indentation level")
         self._buf.write(s)
         self.__flush()
 
     def writeln_lr(self, s):
         self._indents -= 1
-        if self._indents < self._indents_min:
+        if self._indents < 0:
             raise RuntimeError("cannot dedent past initial indentation level")
         self._buf.write(s)
         self.__flush()
         self._indents += 1
 
     def section(self) -> "Writer":
-        # if self._buf.tell() != 0:
         self.__flush()
         w = Writer(
-            indents=self._indents,
+            prefix=self._prefix + self._indent_by * self._indents,
             indent_by=self._indent_by)
         self._content.append(w)
         return w
@@ -115,7 +110,7 @@ class Writer:
             if isinstance(elem, str):
                 buf.write(elem)
             elif isinstance(elem, Newline):
-                buf.write(f"\n{self._indent_by * elem.indents}")
+                buf.write(f"\n{self._prefix}{self._indent_by * elem.indents}")
             else:
                 elem.render(buf)
 
