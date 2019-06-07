@@ -195,9 +195,8 @@ cdef unicode snippet_repr(snippet *self):
 ## FileWriter
 ################################################################################
 cdef class FileWriter:
-    cdef FILE *out
 
-    def write(self, s: str) -> None:
+    cpdef void write(self, str s):
         cdef:
             size_t written = 0
             wchar_t *ss = s # TODO: look into this, does it work?
@@ -318,6 +317,11 @@ cdef class Parser:
             raise MemoryError("allocating line")
         self.line_num = 0
 
+        # snippet indentation (buffer)
+        self.snippet_indent = cstr_new(buf_len_line)
+        if self.snippet_indent == NULL:
+            raise MemoryError("allocating snippet indentation prefix")
+
     def reset(self, fpath_src: str, fpath_dst: t.Optional[str]):
         # TODO: also reset line number (where IS the line number?) and so on
         # If overwriting the input file - generate a tempfile for output
@@ -377,6 +381,9 @@ cdef class Parser:
         if self.line != NULL:
             cstr_free(self.line)
 
+        if self.snippet_indent != NULL:
+            cstr_free(self.snippet_indent)
+
     cdef repr(self):
         return (
             "#Parser["
@@ -399,6 +406,15 @@ cdef class Parser:
 
     def __repr__(self):
         return self.repr()
+
+    cdef int cpy_snippet_indentation(self) nogil:
+        cdef:
+            wchar_t *start =  self.line.ptr
+            wchar_t *end = NULL
+        end = start
+        while iswspace(end[0]):
+            end += 1
+        return cstr_ncpy_wchar(self.snippet_indent, start, end-start)
 
     cdef int snippet_find(self, snippet* dst) nogil:
         cdef:
@@ -470,7 +486,8 @@ cdef class Parser:
 
     cdef void expand_snippet(self, Context ctx):
         cdef FileWriter fw = FileWriter.from_handle(self.fh_out)
-        (<object>ctx.on_snippet)(ctx, fw)
+        cdef str prefix = self.snippet_indent.ptr
+        (<object>ctx.on_snippet)(ctx, prefix, fw)
 
     cdef PARSE_RES doparse(self, Context ctx) nogil:
         cdef int ret = READ_OK
@@ -487,6 +504,7 @@ cdef class Parser:
                 continue
             if self.snippet_start.type != SNIPPET_OPEN:
                 return PARSE_EXPECTED_SNIPPET_OPEN
+            self.cpy_snippet_indentation()
 
             while True: # Got the opening snippet, look for closing snippet
                 ret = self.readline()

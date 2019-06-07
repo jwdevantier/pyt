@@ -24,6 +24,13 @@ snippet_cb = t.Callable[[Context, IWriter], None]
 
 ctypedef void* c_snippet_cb
 
+cdef class FileWriter:
+    cdef FILE *out
+    cpdef void write(self, str s)
+
+    @staticmethod
+    cdef FileWriter from_handle(FILE *fh)
+
 cdef class Parser:
     # file handlers for input and output files
     cdef FILE *fh_in
@@ -48,8 +55,10 @@ cdef class Parser:
     cdef cstr *line
     cdef size_t line_num
 
+    cdef cstr *snippet_indent
 
     cdef repr(self)
+    cdef int cpy_snippet_indentation(self) nogil
     cdef int snippet_find(self, snippet* dst) nogil
     cdef int readline(self) nogil
     cdef int writeline(self) nogil

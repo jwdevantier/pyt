@@ -23,17 +23,17 @@ def foo():
 #     # except parser.PytError as e:
 #     #     print("GOT PytError!!")
 
-
-def expand_snippet(ctx: Context, out: IWriter):
+def expand_snippet(ctx: Context, prefix: str, out: IWriter):
     print(ctx)
-    print(f"expand_snippet(env: {ctx.env}, out: {out}, snippet_name: {ctx.src}")
+    print(f"expand_snippet(env: {ctx.env}, out: {out}, snippet_name: {ctx.src} - prefix '{prefix}'")
     out.write("hello, world")
+
 
 def test_x():
     parser = Parser('<@@', '@@>')
     parser.parse(
         expand_snippet,
-        "/tmp/test-parse.py",
+        "/home/pseud/Documents/codegen-test/test-parse.py",
         '/tmp/lolcat')
     print("PARSER")
     print(parser)
