@@ -29,11 +29,11 @@ cdef extern from "wchar.h" nogil:
     wchar_t *wcsstr(const wchar_t *haystack, const wchar_t *needle);
     wchar_t *wcscpy(wchar_t *dest, const wchar_t *src)
     wchar_t *wcsncpy(wchar_t *dest, const wchar_t *src, size_t n);
-    size_t wcslen(const wchar_t *s); #TODO: remove
+    size_t wcslen(const wchar_t *s);  #TODO: remove
     size_t wcsnlen_s(const wchar_t *s, size_t strsz);
 
-    wchar_t *wmemset( wchar_t *dest, wchar_t ch, size_t count );
-    int wcscmp( const wchar_t *lhs, const wchar_t *rhs );
+    wchar_t *wmemset(wchar_t *dest, wchar_t ch, size_t count);
+    int wcscmp(const wchar_t *lhs, const wchar_t *rhs);
 
 cdef extern from "wctype.h" nogil:
     int iswspace(wchar_t ch)  # wint_t
@@ -52,8 +52,10 @@ def tmp_file(path):
     tf.close()
     return fname
 
+
 class PytError(Exception):
     pass
+
 
 ################################################################################
 ## CString
@@ -66,10 +68,10 @@ cdef struct cstr:
 cdef cstr *cstr_new(size_t initial_size) nogil:
     cdef cstr *self = NULL
     if initial_size == 0:
-        return NULL # TODO: interface with errno
-    initial_size = initial_size + 1 # reserve space for null character
+        return NULL  # TODO: interface with errno
+    initial_size = initial_size + 1  # reserve space for null character
 
-    self = <cstr *>malloc(sizeof(cstr))
+    self = <cstr *> malloc(sizeof(cstr))
     if self == NULL:
         return NULL
 
@@ -78,7 +80,7 @@ cdef cstr *cstr_new(size_t initial_size) nogil:
     if self.ptr == NULL:
         free(self)
         return NULL
-    wmemset(self.ptr, '\0', 1) # terminate "string"
+    wmemset(self.ptr, '\0', 1)  # terminate "string"
     self.buflen = initial_size
     self.strlen = 0
     return self
@@ -100,7 +102,7 @@ cdef int cstr_realloc(cstr *self, size_t n) nogil:
 
 cdef int cstr_ncpy_wchar(cstr *self, wchar_t *src, size_t n) nogil:
     if n == 0:
-        n = wcslen(src) # does NOT include null terminator
+        n = wcslen(src)  # does NOT include null terminator
     if n >= self.buflen:
         if cstr_realloc(self, n) != 0:
             return -1
@@ -159,7 +161,7 @@ cdef snippet *snippet_new(size_t bufsiz) nogil:
     if cstr == NULL:
         return NULL
 
-    self = <snippet *>malloc(sizeof(snippet))
+    self = <snippet *> malloc(sizeof(snippet))
     if self == NULL:
         free(cstr)
         return NULL
@@ -196,11 +198,10 @@ cdef unicode snippet_repr(snippet *self):
 ## FileWriter
 ################################################################################
 cdef class FileWriter:
-
     cpdef void write(self, str s):
         cdef:
             size_t written = 0
-            wchar_t *ss = s # TODO: look into this, does it work?
+            wchar_t *ss = s  # TODO: look into this, does it work?
         if fwrite(ss, sizeof(wchar_t) * len(s), 1, self.out) != 1:
             raise PytError("write failed")
         return
@@ -229,7 +230,7 @@ cdef class Context:
         self.src = src
         self.dst = dst
         self.env = {}
-        self.on_snippet = <c_snippet_cb>cb
+        self.on_snippet = <c_snippet_cb> cb
 
 ################################################################################
 ## Parser
@@ -241,7 +242,7 @@ DEF BUF_INDENT_BY_LEN = 40
 ctypedef unsigned int PARSE_RES
 cdef enum:
     PARSE_OK = 0
-    PARSE_READ_ERR = 1 # test - permissions issues
+    PARSE_READ_ERR = 1  # test - permissions issues
     PARSE_WRITE_ERR = 2
     PARSE_EXPECTED_SNIPPET_OPEN = 3
     PARSE_EXPECTED_SNIPPET_CLOSE = 4
@@ -271,7 +272,6 @@ cdef enum:
 
 # TODO: is it OK that tag_open == tag_close (e.g. '@@')
 cdef class Parser:
-
     def __init__(
             self,
             tag_open: str = '<@@', tag_close: str = '@@>',
@@ -410,14 +410,14 @@ cdef class Parser:
 
     cdef int cpy_snippet_indentation(self) nogil:
         cdef:
-            wchar_t *start =  self.line.ptr
+            wchar_t *start = self.line.ptr
             wchar_t *end = NULL
         end = start
         while iswspace(end[0]):
             end += 1
-        return cstr_ncpy_wchar(self.snippet_indent, start, end-start)
+        return cstr_ncpy_wchar(self.snippet_indent, start, end - start)
 
-    cdef int snippet_find(self, snippet* dst) nogil:
+    cdef int snippet_find(self, snippet *dst) nogil:
         cdef:
             wchar_t *start = NULL
             wchar_t *end = NULL
@@ -436,9 +436,9 @@ cdef class Parser:
             # print("snippet_find OOB")
             return -1
 
-        if start[0] == '/': # end snippet, advance past slash, too
+        if start[0] == '/':  # end snippet, advance past slash, too
             typ = SNIPPET_CLOSE
-            start = start +1
+            start = start + 1
 
         # find snippet suffix, use 'start' to enforce ordering of tags
         # and limit the search scope.
@@ -447,7 +447,7 @@ cdef class Parser:
             # print("snippet_find end")
             return -1
 
-        ret = cstr_ncpy_wchar(dst.cstr, start, end-start)
+        ret = cstr_ncpy_wchar(dst.cstr, start, end - start)
         if ret != 0:
             # print("snippet_find cpy")
             return ret
@@ -489,7 +489,7 @@ cdef class Parser:
         cdef wchar_t buf = '\0'
         cdef FileWriter fw = FileWriter.from_handle(self.fh_out)
         cdef str prefix = self.snippet_indent.ptr
-        (<object>ctx.on_snippet)(ctx, prefix, fw)
+        (<object> ctx.on_snippet)(ctx, prefix, fw)
 
         # ensure snippet ends with a newline
         # (so that snippet end line is printed properly)
@@ -498,10 +498,9 @@ cdef class Parser:
         if buf != '\n':
             fwrite(&NEWLINE, sizeof(wchar_t), 1, self.fh_out)
 
-
     cdef PARSE_RES doparse(self, Context ctx) nogil:
         cdef int ret = READ_OK
-        setlocale(LC_ALL, "en_GB.utf8") # TODO: move into parser state
+        setlocale(LC_ALL, "en_GB.utf8")  # TODO: move into parser state
         while True:
             ret = self.readline()
             if ret:
@@ -516,7 +515,7 @@ cdef class Parser:
                 return PARSE_EXPECTED_SNIPPET_OPEN
             self.cpy_snippet_indentation()
 
-            while True: # Got the opening snippet, look for closing snippet
+            while True:  # Got the opening snippet, look for closing snippet
                 ret = self.readline()
                 if ret:
                     # TODO: investigate, is it OK to break and have outer loop
