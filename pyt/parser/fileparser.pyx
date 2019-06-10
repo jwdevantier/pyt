@@ -117,7 +117,7 @@ cdef int cstr_ncpy_unicode(cstr *self, unicode s, size_t n):
     return cstr_ncpy_wchar(self, src, n)
 
 cdef void cstr_reset(cstr *self) nogil:
-    self.ptr[0] = '\0'
+    wmemset(self.ptr, '\0', 1)  # terminate "string"
     self.strlen = 0
 
 cdef size_t cstr_len(cstr *self) nogil:
@@ -324,14 +324,12 @@ cdef class Parser:
             raise MemoryError("allocating snippet indentation prefix")
 
     def reset(self, fpath_src: str, fpath_dst: t.Optional[str]):
-        # TODO: also reset line number (where IS the line number?) and so on
         # If overwriting the input file - generate a tempfile for output
+        cstr_reset(self.tmp_file_path)
         if not fpath_dst:
             fpath_dst = tmp_file(fpath_src)
             if cstr_ncpy_unicode(self.tmp_file_path, fpath_dst, len(fpath_dst)) != 0:
                 raise MemoryError("failed to copy string to tmp_file_path")
-
-        cstr_reset(self.line)
 
         # Close input file if necessary
         if self.fh_in != NULL:
@@ -359,6 +357,13 @@ cdef class Parser:
         if self.fh_out == NULL:
             # TODO: better error needed
             raise RuntimeError(f"failed to open output file: '{fpath_dst}'")
+
+        snippet_reset(self.snippet_start)
+        snippet_reset(self.snippet_end)
+
+        cstr_reset(self.line)
+        self.line_num = 0
+        cstr_reset(self.snippet_indent)
 
     def __dealloc__(self):
         if self.fh_in != NULL:
@@ -388,11 +393,16 @@ cdef class Parser:
     cdef repr(self):
         return (
             "#Parser["
-            "fh_in: {}, "
-            "fh_out: {}, "
-            "tmp_file_path: {}, "
-            "snippet_start: {}, "
-            "snippet_end: {}, "
+            "\n\tfh_in: {}, "
+            "\n\tfh_out: {}, "
+            "\n\ttmp_file_path: {}, "
+            "\n\ttag_open: {}, "
+            "\n\ttag_close: {}, "
+            "\n\tsnippet_start: {}, "
+            "\n\tsnippet_end: {}, "
+            "\n\tline: {}"
+            "\n\tlinenum: {}"
+            "\n\tsnippet indent: {}"
             "]"
         ).format(
             '<null FILE*>' if self.fh_in == NULL else 'FILE*',
@@ -402,7 +412,9 @@ cdef class Parser:
             cstr_repr(self.tag_close),
             snippet_repr(self.snippet_start),
             snippet_repr(self.snippet_end),
-            cstr_repr(self.line)
+            cstr_repr(self.line),
+            self.line_num,
+            cstr_repr(self.snippet_indent)
         )
 
     def __repr__(self):
@@ -456,25 +468,26 @@ cdef class Parser:
         return 0
 
     cdef int readline(self) nogil:
-        # Read new line into buffer, advance linenumber if OK
-        # signal errors otherwise (READ_ERR, READ_EOF)
-        cdef size_t n = 0
-        if not fgetws(self.line.ptr, self.line.buflen, self.fh_in):
-            if feof(self.fh_in):
-                # print("readline: READ_EOF")
-                return READ_EOF
-            # print("readline: READ_ERR")
-            return READ_ERR
-        n = wcslen(self.line.ptr)
-        if n == self.line.strlen:
+        cdef:
+            wchar_t *start = self.line.ptr
+            size_t buflen = self.line.buflen
+            size_t n_total_read = 0
+            size_t n_iter_read = 0
+
+        while True:
+            if not fgetws(start, buflen, self.fh_in):
+                if feof(self.fh_in):
+                    return READ_EOF
+                return READ_ERR
+            n_iter_read = wcslen(start)
+            if n_iter_read != (buflen - 1):
+                self.line.strlen = n_total_read + n_iter_read
+                break
             if cstr_realloc(self.line, self.line.buflen * 2) != 0:
                 return READ_ERR
-            # TODO: technically recursive.. could be bad?
-            return self.readline()
-        self.line.strlen = n
-
-        self.line_num = self.line_num + 1
-        # print("readline: READ_OK")
+            n_total_read += n_iter_read
+            start = self.line.ptr + n_total_read
+            buflen = self.line.buflen - n_total_read
         return READ_OK
 
     cdef int writeline(self) nogil:
@@ -539,7 +552,7 @@ cdef class Parser:
                     return PARSE_WRITE_ERR
                 break  # Done, go back to outer state
 
-    def parse(self, cb: snippet_cb, fname_src: str, fname_dst: t.Optional[str]):
+    def parse(self, cb: snippet_cb, fname_src: str, fname_dst: t.Optional[str]) -> t.Optional[str]:
         cdef PARSE_RES res = PARSE_OK
         cdef Context ctx = Context(cb, fname_src, fname_dst)
         self.reset(fname_src, fname_dst)
@@ -550,5 +563,7 @@ cdef class Parser:
                 return parse_result_err(res)
         finally:
             # TODO: if temporary file, rename/move
+            print("TODO: iff. using tempfile - rename/overwrite old file")
             if fflush(self.fh_out) != 0:
+                print("pyterror - flushing failed")
                 raise PytError("flushing output failed!")
