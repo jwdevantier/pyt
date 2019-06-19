@@ -5,6 +5,19 @@ from pyt.protocols import IWriter
 
 ctypedef Py_UNICODE wchar_t
 
+cdef extern from "wchar.h" nogil:
+    ctypedef struct mbstate_t:
+        pass
+
+ctypedef unsigned int PARSE_RES
+cdef enum:
+    PARSE_OK = 0
+    PARSE_READ_ERR = 1  # test - permissions issues
+    PARSE_WRITE_ERR = 2
+    PARSE_EXPECTED_SNIPPET_OPEN = 3
+    PARSE_EXPECTED_SNIPPET_CLOSE = 4
+    PARSE_SNIPPET_NAMES_MISMATCH = 5
+
 cdef struct cstr:
     size_t buflen
     wchar_t *ptr
@@ -19,6 +32,15 @@ cdef struct snippet:
     cstr *cstr
     SNIPPET_TYPE type
     size_t line_num
+
+# cdef struct wcsenc:
+#     mbstate_t state
+#     void *buf
+#     size_t bufsiz
+#     size_t charlen
+cdef extern from "wcsenc.h" nogil:
+    ctypedef struct wcsenc_t:
+        pass
 
 snippet_cb = t.Callable[[Context, IWriter], None]
 
@@ -54,6 +76,7 @@ cdef class Parser:
     # buffer holding a line of input from fh_in
     cdef cstr *line
     cdef size_t line_num
+    cdef wcsenc_t *encoder
 
     cdef cstr *snippet_indent
 

@@ -51,7 +51,9 @@ setup(
     tests_require=test_requires,
     # Cython Modules
     ext_modules=cythonize([
-        Extension("pyt.parser.fileparser", ["pyt/parser/fileparser.pyx"]),
+        Extension("pyt.parser.fileparser", [
+            "pyt/parser/fileparser.pyx",
+            "pyt/parser/wcsenc.c"]),
         Extension("pyt.utils.spec.spec", ["pyt/utils/spec/spec.pyx"])
     ], annotate=True)
 

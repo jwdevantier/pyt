@@ -4,8 +4,12 @@ from libc.string cimport memcpy
 from libc.locale cimport setlocale, LC_ALL
 from libc.stdio cimport (fopen, fclose, fwrite, fflush, feof, perror, FILE, fseek, fread)
 import tempfile
-import os
+from os.path import dirname as os_path_dirname, basename as os_path_basename
+from os import replace as os_replace
 import typing as t
+import logging
+
+log = logging.getLogger(__name__)
 
 # C api docs: https://devdocs.io/c/
 
@@ -14,8 +18,8 @@ import typing as t
 ################################################################################
 
 cdef:
-    const char *FILE_READ = 'rb'
-    const char *FILE_WRITE = 'wb+'
+    const char *FILE_READ = 'rt'
+    const char *FILE_WRITE = 'wt+'
     wchar_t NEWLINE = '\n'
 
 ctypedef unsigned int wint_t
@@ -25,26 +29,44 @@ cdef extern from "stdio.h" nogil:
     char *strstr(const char *haystack, const char *needle)
 
 cdef extern from "wchar.h" nogil:
+    int wcscmp(const wchar_t *lhs, const wchar_t *rhs);
     wchar_t *fgetws(wchar_t *buf, int count, FILE *stream)
     wchar_t *wcsstr(const wchar_t *haystack, const wchar_t *needle);
     wchar_t *wcscpy(wchar_t *dest, const wchar_t *src)
     wchar_t *wcsncpy(wchar_t *dest, const wchar_t *src, size_t n);
-    size_t wcslen(const wchar_t *s);  #TODO: remove
+    size_t wcslen(const wchar_t *s);  #TODO: <--- remove
     size_t wcsnlen_s(const wchar_t *s, size_t strsz);
 
     wchar_t *wmemset(wchar_t *dest, wchar_t ch, size_t count);
-    int wcscmp(const wchar_t *lhs, const wchar_t *rhs);
+    size_t wcsrtombs(char *dst, const wchar_t ** src, size_t len, mbstate_t*ps);
+
+    size_t WCS_WRITE_ERROR;
+
+cdef extern from "stdlib.h" nogil:
+    size_t wcstombs(char *dst, const wchar_t *src, size_t len);
 
 cdef extern from "wctype.h" nogil:
     int iswspace(wchar_t ch)  # wint_t
     int iswlower(wint_t ch)  #wint_t
 
+cdef extern from "wcsenc.h" nogil:
+    ctypedef struct wcsenc_t:
+        pass
+
+    wcsenc_t *wcsenc_new(size_t charlen)
+    void wcsenc_free(wcsenc_t *self)
+    void wcsenc_reset(wcsenc_t *self)
+    size_t wcsenc_encode_wcs(wcsenc_t *self, wchar_t *str, size_t len)
+    size_t wcsenc_bufsiz(wcsenc_t *self)
+    char *wcsenc_buf(wcsenc_t *self)
+
+
 ################################################################################
 ## Utils
 ################################################################################
 def tmp_file(path):
-    in_dir = os.path.dirname(path)
-    fname = f"{os.path.basename(path)}."
+    in_dir = os_path_dirname(path)
+    fname = f"{os_path_basename(path)}."
 
     tf = tempfile.NamedTemporaryFile(
         dir=in_dir, prefix=fname, suffix='.tmp', delete=False)
@@ -93,7 +115,7 @@ cdef void cstr_free(cstr *self) nogil:
     free(self)
 
 cdef int cstr_realloc(cstr *self, size_t n) nogil:
-    new_ptr = <wchar_t *> realloc(self.ptr, (n + 1) * sizeof(wchar_t))
+    cdef wchar_t *new_ptr = <wchar_t *> realloc(self.ptr, (n + 1) * sizeof(wchar_t))
     if new_ptr == NULL:
         return -1
     self.buflen = n + 1
@@ -120,8 +142,14 @@ cdef void cstr_reset(cstr *self) nogil:
     wmemset(self.ptr, '\0', 1)  # terminate "string"
     self.strlen = 0
 
-cdef size_t cstr_len(cstr *self) nogil:
+cdef inline size_t cstr_len(cstr *self) nogil:
     return self.strlen
+
+cdef inline size_t cstr_buflen(cstr *self) nogil:
+    return self.strlen * sizeof(wchar_t)
+
+cdef inline wchar_t *cstr_ptr(cstr *self) nogil:
+    return self.ptr
 
 cdef unicode cstr_repr(cstr *self):
     if self == NULL:
@@ -201,7 +229,7 @@ cdef class FileWriter:
     cpdef void write(self, str s):
         cdef:
             size_t written = 0
-            wchar_t *ss = s  # TODO: look into this, does it work?
+            wchar_t *ss = s
         if fwrite(ss, sizeof(wchar_t) * len(s), 1, self.out) != 1:
             raise PytError("write failed")
         return
@@ -226,9 +254,9 @@ cdef class FileWriter:
 ## Context
 ################################################################################
 cdef class Context:
-    def __init__(self, cb: snippet_cb, src: str, dst: str):
+    def __init__(self, cb: snippet_cb, src: str, dst: t.Optional[str]):
         self.src = src
-        self.dst = dst
+        self.dst = dst or ""
         self.env = {}
         self.on_snippet = <c_snippet_cb> cb
 
@@ -239,16 +267,7 @@ DEF BUF_LINE_LEN = 512
 DEF BUF_SNIPPET_NAME_LEN = 80
 DEF BUF_INDENT_BY_LEN = 40
 
-ctypedef unsigned int PARSE_RES
-cdef enum:
-    PARSE_OK = 0
-    PARSE_READ_ERR = 1  # test - permissions issues
-    PARSE_WRITE_ERR = 2
-    PARSE_EXPECTED_SNIPPET_OPEN = 3
-    PARSE_EXPECTED_SNIPPET_CLOSE = 4
-    PARSE_SNIPPET_NAMES_MISMATCH = 5
-
-cdef unicode parse_result_err(PARSE_RES res):
+def parse_result_err(PARSE_RES res) -> str:
     if res == PARSE_OK:
         return "Parse OK"
     elif res == PARSE_READ_ERR:
@@ -318,6 +337,11 @@ cdef class Parser:
             raise MemoryError("allocating line")
         self.line_num = 0
 
+        #
+        self.encoder = wcsenc_new(buf_len_line)
+        if self.encoder == NULL:
+            raise MemoryError("allocating wide-character (wcs) converter")
+
         # snippet indentation (buffer)
         self.snippet_indent = cstr_new(buf_len_line)
         if self.snippet_indent == NULL:
@@ -363,6 +387,7 @@ cdef class Parser:
 
         cstr_reset(self.line)
         self.line_num = 0
+        wcsenc_reset(self.encoder)
         cstr_reset(self.snippet_indent)
 
     def __dealloc__(self):
@@ -491,10 +516,21 @@ cdef class Parser:
         return READ_OK
 
     cdef int writeline(self) nogil:
-        cdef size_t nchars_written = -1
-        nchars_written = fwrite(self.line.ptr, sizeof(wchar_t) * self.line.strlen, 1, self.fh_out)
-        if nchars_written != 1:
-            perror("write failed")
+        cdef:
+            size_t written = 0
+            size_t converted = WCS_WRITE_ERROR
+        converted = wcsenc_encode_wcs(self.encoder, self.line.ptr, self.line.strlen)
+        if converted == WCS_WRITE_ERROR:
+            with gil:
+                line_buffer_len = cstr_len(self.line) * sizeof(wchar_t)
+                print(f"FAILED LINE WRITE: converter wrote {written}B, but line buffer holds {line_buffer_len}B")
+            perror("write failed - converting buffer to locale's encoding")
+            return -1
+        written = fwrite(wcsenc_buf(self.encoder), sizeof(char), converted, self.fh_out)
+        if written != converted:
+            with gil:
+                print(f"FAILED LINE WRITE: wrote {written}B to file, but buffer has {converted}B")
+            perror("write failed - writing to file")
             return -1
         return 0
 
@@ -513,10 +549,15 @@ cdef class Parser:
 
     cdef PARSE_RES doparse(self, Context ctx) nogil:
         cdef int ret = READ_OK
-        setlocale(LC_ALL, "en_GB.utf8")  # TODO: move into parser state
+        # setlocale(LC_ALL, "en_GB.utf8")  # TODO: move into parser state
+        setlocale(LC_ALL, "UTF-8")
         while True:
             ret = self.readline()
             if ret:
+                if ret == READ_ERR:
+                    with gil:
+                        log.error(f"READ_ERR outer")
+                    return PARSE_READ_ERR
                 break
 
             if self.writeline() != 0:
@@ -533,6 +574,10 @@ cdef class Parser:
                 if ret:
                     # TODO: investigate, is it OK to break and have outer loop
                     #       attempt to read the line again even though EOF?
+                    if ret == READ_ERR:
+                        with gil:
+                            log.error(f"READ_ERR inner!")
+                        return PARSE_READ_ERR
                     break
 
                 if self.snippet_find(self.snippet_end) != 0:
@@ -543,27 +588,32 @@ cdef class Parser:
                 if snippet_cmp(self.snippet_start, self.snippet_end) != 0:
                     return PARSE_SNIPPET_NAMES_MISMATCH
 
-                #print(f"SNIPPET '{self.snippet_start.cstr.ptr}' from {self.snippet_start.line_num}-{self.snippet_end.line_num}")
-                # TODO: run snippet code, write in the results here
-                # TODO: also - expand output to be aligned with snippet indentation
                 with gil:
                     self.expand_snippet(ctx)
                 if self.writeline() != 0:
                     return PARSE_WRITE_ERR
                 break  # Done, go back to outer state
 
-    def parse(self, cb: snippet_cb, fname_src: str, fname_dst: t.Optional[str]) -> t.Optional[str]:
+    def parse(self, cb: snippet_cb, fname_src: str, fname_dst: t.Optional[str]) -> PARSE_RES:
         cdef PARSE_RES res = PARSE_OK
+
         cdef Context ctx = Context(cb, fname_src, fname_dst)
         self.reset(fname_src, fname_dst)
 
         try:
-            res = self.doparse(ctx)
-            if res != PARSE_OK:
-                return parse_result_err(res)
+            return self.doparse(ctx)
         finally:
             # TODO: if temporary file, rename/move
-            print("TODO: iff. using tempfile - rename/overwrite old file")
+            #print("TODO: iff. using tempfile - rename/overwrite old file")
             if fflush(self.fh_out) != 0:
                 print("pyterror - flushing failed")
                 raise PytError("flushing output failed!")
+            if self.fh_out != NULL:
+                fclose(self.fh_out)
+                self.fh_out = NULL
+            if self.fh_in != NULL:
+                fclose(self.fh_in)
+                self.fh_in = NULL
+            if fname_dst == None:
+                print("no out - overwrite input file")
+                os_replace(self.tmp_file_path.ptr, fname_src)
