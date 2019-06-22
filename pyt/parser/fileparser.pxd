@@ -43,10 +43,12 @@ ctypedef void* c_snippet_cb
 
 cdef class FileWriter:
     cdef FILE *out
+    cdef wcsenc_t *encoder
+    cdef bint got_newline
     cpdef void write(self, str s)
 
     @staticmethod
-    cdef FileWriter from_handle(FILE *fh)
+    cdef FileWriter from_handle(FILE *fh, wcsenc_t *encoder)
 
 cdef class Parser:
     # file handlers for input and output files

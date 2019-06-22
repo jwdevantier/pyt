@@ -228,11 +228,11 @@ cdef unicode snippet_repr(snippet *self):
 cdef class FileWriter:
     cpdef void write(self, str s):
         cdef:
-            size_t written = 0
-            wchar_t *ss = s
-        if fwrite(ss, sizeof(wchar_t) * len(s), 1, self.out) != 1:
-            raise PytError("write failed")
-        return
+            wchar_t *s_ptr = s
+            int ret = file_write(self.out, self.encoder, s_ptr, len(s))
+        if ret:
+            raise PytError("failed to write to file")
+        self.got_newline = s.endswith('\n')
 
     def __dealloc__(self):
         if fflush(self.out) != 0:
@@ -245,9 +245,13 @@ cdef class FileWriter:
     # This is done because all arguments to __init__ are coerced to Python objects
     # see https://cython.readthedocs.io/en/latest/src/userguide/extension_types.html#existing-pointers-instantiation
     @staticmethod
-    cdef FileWriter from_handle(FILE *fh):
+    cdef FileWriter from_handle(FILE *fh, wcsenc_t *encoder):
         cdef FileWriter w = FileWriter.__new__(FileWriter)
         w.out = fh
+        w.encoder = encoder
+        # Empty snippets need no additional newline, the tags will appear on
+        # separate lines by default.
+        w.got_newline = True
         return w
 
 ################################################################################
@@ -266,6 +270,20 @@ cdef class Context:
 DEF BUF_LINE_LEN = 512
 DEF BUF_SNIPPET_NAME_LEN = 80
 DEF BUF_INDENT_BY_LEN = 40
+
+cdef inline int file_write(FILE *fh, wcsenc_t *encoder, wchar_t *str, size_t strlen) nogil:
+    cdef:
+        size_t encoded = WCS_WRITE_ERROR
+        size_t written = 0
+    encoded = wcsenc_encode_wcs(encoder, str, strlen)
+    if encoded == WCS_WRITE_ERROR:
+        perror("Write failed. Failed to encode wide character string (wcs) to system locale")
+        return -1
+    written = fwrite(wcsenc_buf(encoder), sizeof(char), encoded, fh)
+    if written != encoded:
+        perror("Write failed. Failed to write encoded string to file")
+        return -1
+    return 0
 
 def parse_result_err(PARSE_RES res) -> str:
     if res == PARSE_OK:
@@ -517,22 +535,8 @@ cdef class Parser:
 
     cdef int writeline(self) nogil:
         cdef:
-            size_t written = 0
-            size_t converted = WCS_WRITE_ERROR
-        converted = wcsenc_encode_wcs(self.encoder, self.line.ptr, self.line.strlen)
-        if converted == WCS_WRITE_ERROR:
-            with gil:
-                line_buffer_len = cstr_len(self.line) * sizeof(wchar_t)
-                print(f"FAILED LINE WRITE: converter wrote {written}B, but line buffer holds {line_buffer_len}B")
-            perror("write failed - converting buffer to locale's encoding")
-            return -1
-        written = fwrite(wcsenc_buf(self.encoder), sizeof(char), converted, self.fh_out)
-        if written != converted:
-            with gil:
-                print(f"FAILED LINE WRITE: wrote {written}B to file, but buffer has {converted}B")
-            perror("write failed - writing to file")
-            return -1
-        return 0
+            wchar_t *line_ptr = self.line.ptr
+        return file_write(self.fh_out, self.encoder, line_ptr, self.line.strlen)
 
     cdef void expand_snippet(self, Context ctx):
         cdef wchar_t buf = '\0'
@@ -542,10 +546,8 @@ cdef class Parser:
 
         # ensure snippet ends with a newline
         # (so that snippet end line is printed properly)
-        fseek(self.fh_out, -sizeof(wchar_t), 1)
-        fread(&buf, sizeof(wchar_t), 1, self.fh_out)
-        if buf != '\n':
-            fwrite(&NEWLINE, sizeof(wchar_t), 1, self.fh_out)
+        if not fw.got_newline:
+            file_write(self.fh_out, self.encoder, &NEWLINE, 1)
 
     cdef PARSE_RES doparse(self, Context ctx) nogil:
         cdef int ret = READ_OK
