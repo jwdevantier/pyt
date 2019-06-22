@@ -33,11 +33,6 @@ cdef struct snippet:
     SNIPPET_TYPE type
     size_t line_num
 
-# cdef struct wcsenc:
-#     mbstate_t state
-#     void *buf
-#     size_t bufsiz
-#     size_t charlen
 cdef extern from "wcsenc.h" nogil:
     ctypedef struct wcsenc_t:
         pass
