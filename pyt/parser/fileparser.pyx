@@ -539,10 +539,12 @@ cdef class Parser:
         return file_write(self.fh_out, self.encoder, line_ptr, self.line.strlen)
 
     cdef void expand_snippet(self, Context ctx):
-        cdef wchar_t buf = '\0'
-        cdef FileWriter fw = FileWriter.from_handle(self.fh_out)
-        cdef str prefix = self.snippet_indent.ptr
-        (<object> ctx.on_snippet)(ctx, prefix, fw)
+        cdef:
+            wchar_t buf = '\0'
+            FileWriter fw = FileWriter.from_handle(self.fh_out, self.encoder)
+            str prefix = self.snippet_indent.ptr
+            str snippet = self.snippet_start.cstr.ptr
+        (<object> ctx.on_snippet)(ctx, snippet, prefix, fw)
 
         # ensure snippet ends with a newline
         # (so that snippet end line is printed properly)
