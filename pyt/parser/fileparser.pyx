@@ -597,14 +597,17 @@ cdef class Parser:
                 if self.writeline() != 0:
                     return PARSE_WRITE_ERR
                 break  # Done, go back to outer state
+        return PARSE_OK
 
     def parse(self, cb: snippet_cb, fname_src: str, fname_dst: t.Optional[str]) -> PARSE_RES:
-
-        cdef Context ctx = Context(cb, fname_src, fname_dst)
+        cdef:
+            Context ctx = Context(cb, fname_src, fname_dst)
+            size_t parse_result
         self.reset(fname_src, fname_dst)
 
         try:
-            return self.doparse(ctx)
+            parse_result = self.doparse(ctx)
+            return parse_result
         finally:
             # TODO: if temporary file, rename/move
             #print("TODO: iff. using tempfile - rename/overwrite old file")
@@ -617,6 +620,6 @@ cdef class Parser:
             if self.fh_in != NULL:
                 fclose(self.fh_in)
                 self.fh_in = NULL
-            if fname_dst == None:
+            if fname_dst is None and parse_result == PARSE_OK:
                 print("no out - overwrite input file")
                 os_replace(self.tmp_file_path.ptr, fname_src)
