@@ -133,6 +133,38 @@ def foo():
     print("after")
 """
 
+prog_err_expected_open = """\
+def foo():
+    #<@@/snippet1@@>
+    hello from snippet1
+    #<@@snippet1@@>
+    something else
+    #<@@snippet2@@>
+    hello from snippet 2
+    #<@@/snippet2@@>"""
+
+prog_err_expected_close = """\
+def foo():
+    #<@@snippet1@@>
+    hello from snippet1
+    #<@@snippet1@@>
+    something else
+    #<@@snippet2@@>
+    hello from snippet 2
+    #<@@/snippet2@@>"""
+
+prog_err_mismatched_snippets = """\
+def foo():
+    #<@@snippet1@@>
+    hello from snippet1
+    #<@@/snippet2@@>
+    something else
+    #<@@snippet2@@>
+    hello from snippet 2
+    #<@@/snippet2@@>"""
+
+
+
 SNIPPETS = {}
 
 
@@ -195,18 +227,44 @@ def test_file_parsing(tmpfile, mode, contents):
     snippets or those snippets have already been expanded, write out the exact
     same contents.
     """
-    with tmpfile("w", encoding=mode) as expected:
-        expected.write(contents)
-        expected.flush()
-        expected_name = expected.name
-        print(f"expected at '{expected.name}' (encoding={mode})")
+    with tmpfile("w", encoding=mode) as input_contents:
+        input_contents.write(contents)
+        input_contents.flush()
+        input_fname = input_contents.name
     with tmpfile('w', encoding=mode) as actual:
-        actual_name = actual.name
+        output_fname = actual.name
 
     parser = Parser('<@@', '@@>')
     parser.parse(
         expand_snippet,
-        expected_name,
-        actual_name)
-    print(f"'{expected_name}' => '{actual_name}'")
-    assert filecmp.cmp(expected_name, actual_name, shallow=False)
+        input_fname,
+        output_fname)
+    print(f"'{input_fname}' => '{output_fname}'")
+    assert filecmp.cmp(input_fname, output_fname, shallow=False)
+
+
+@pytest.mark.parametrize("contents, errcode", [
+    (prog_err_expected_open, PARSE_EXPECTED_SNIPPET_OPEN),
+    (prog_err_expected_close, PARSE_EXPECTED_SNIPPET_CLOSE),
+    (prog_err_mismatched_snippets, PARSE_SNIPPET_NAMES_MISMATCH),
+])
+def test_file_parsing_errs(tmpfile, contents, errcode):
+    """
+    Test that the parser correctly identifies and flag errors pertaining to the
+    wrong use of snippet tags. Such as encountering a close snippet before an
+    opening snippet, multiple open snippet tags (e.g. nesting of snippet tags)
+    or snippet tags whose names do not match.
+    """
+    with tmpfile("w", encoding="utf8") as input_contents:
+        input_contents.write(contents)
+        input_contents.flush()
+        input_fname = input_contents.name
+    with tmpfile('w', encoding="utf8") as actual:
+        output_fname = actual.name
+
+    parser = Parser('<@@', '@@>')
+    retval = parser.parse(
+        expand_snippet,
+        input_fname,
+        output_fname)
+    assert retval == errcode, "expected different parser return code"
