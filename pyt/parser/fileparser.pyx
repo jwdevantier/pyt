@@ -552,13 +552,13 @@ cdef class Parser:
             file_write(self.fh_out, self.encoder, &NEWLINE, 1)
 
     cdef PARSE_RES doparse(self, Context ctx) nogil:
-        cdef int ret = READ_OK
+        cdef int read_status = READ_OK
         # setlocale(LC_ALL, "en_GB.utf8")  # TODO: move into parser state
         setlocale(LC_ALL, "UTF-8")
         while True:
-            ret = self.readline()
-            if ret:
-                if ret == READ_ERR:
+            read_status = self.readline()
+            if read_status:
+                if read_status == READ_ERR:
                     with gil:
                         log.error(f"READ_ERR outer")
                     return PARSE_READ_ERR
@@ -574,11 +574,11 @@ cdef class Parser:
             self.cpy_snippet_indentation()
 
             while True:  # Got the opening snippet, look for closing snippet
-                ret = self.readline()
-                if ret:
+                read_status = self.readline()
+                if read_status:
                     # TODO: investigate, is it OK to break and have outer loop
                     #       attempt to read the line again even though EOF?
-                    if ret == READ_ERR:
+                    if read_status == READ_ERR:
                         with gil:
                             log.error(f"READ_ERR inner!")
                         return PARSE_READ_ERR
