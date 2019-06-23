@@ -268,3 +268,32 @@ def test_file_parsing_errs(tmpfile, contents, errcode):
         input_fname,
         output_fname)
     assert retval == errcode, "expected different parser return code"
+
+
+@pytest.mark.parametrize("contents", [
+    prog_noop_file,
+    prog_noop_utf8_only,
+    prog_empty_snippet,
+    prog_single_snippet,
+    prog_multiple_single_line_snippets,
+    prog_multiple_inline_writes,
+    prog_multiline_snippet,
+])
+def test_write_inplace_ok(tmpfile, contents):
+    with tmpfile("w", encoding="utf8") as input_contents:
+        input_contents.write(contents)
+        input_contents.flush()
+        input_fname = input_contents.name
+    parser = Parser('<@@', '@@>')
+    retval = parser.parse(
+        expand_snippet,
+        input_fname,
+        None)
+    assert retval == PARSE_OK, "expected parsing to work"
+
+    with open(input_fname) as fh:
+        actual_contents = fh.read()
+    print(f"out: {input_fname}")
+    assert contents == actual_contents, "parsing failed"
+
+# TODO: write in-place expansion test where the parsing yields an error - ensure file isn't overridden
