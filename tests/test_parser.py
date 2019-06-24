@@ -296,4 +296,25 @@ def test_write_inplace_ok(tmpfile, contents):
     print(f"out: {input_fname}")
     assert contents == actual_contents, "parsing failed"
 
-# TODO: write in-place expansion test where the parsing yields an error - ensure file isn't overridden
+
+@pytest.mark.parametrize("contents", [
+    prog_err_expected_open,
+    prog_err_expected_close,
+    prog_err_mismatched_snippets,
+])
+def test_write_inplace_ok(tmpfile, contents):
+    with tmpfile("w", encoding="utf8") as input_contents:
+        input_contents.write(contents)
+        input_contents.flush()
+        input_fname = input_contents.name
+    parser = Parser('<@@', '@@>')
+    retval = parser.parse(
+        expand_snippet,
+        input_fname,
+        None)
+    assert retval != PARSE_OK, "expected parsing to fail"
+
+    with open(input_fname) as fh:
+        actual_contents = fh.read()
+    print(f"out: {input_fname}")
+    assert contents == actual_contents, "parsing failed"
