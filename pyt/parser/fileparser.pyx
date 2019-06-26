@@ -618,5 +618,4 @@ cdef class Parser:
                 fclose(self.fh_in)
                 self.fh_in = NULL
             if fname_dst is None and parse_result == PARSE_OK:
-                print("no out - overwrite input file")
                 os_replace(self.tmp_file_path.ptr, fname_src)
