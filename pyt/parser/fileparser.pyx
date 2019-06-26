@@ -464,8 +464,7 @@ cdef class Parser:
     cdef int cpy_snippet_indentation(self) nogil:
         cdef:
             wchar_t *start = self.line.ptr
-            wchar_t *end = NULL
-        end = start
+            wchar_t *end = start
         while iswspace(end[0]):
             end += 1
         return cstr_ncpy_wchar(self.snippet_indent, start, end - start)
