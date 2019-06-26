@@ -8,11 +8,8 @@ import filecmp
 
 
 # TODO test:
-#  (err) mismatched snippet tags
-#  (err) unclosed snippet
-#  (err) initial closing tag
-#  in-place writing tests -- should produce non-empty files
 #  test expansion where contents change (ensures we aren't copy-pasting all input)
+#  also, if strict on whiteline - write tests showcasing this
 
 
 # TODO: enhance test information:
@@ -100,6 +97,15 @@ def foo():
     print("after")
 """
 
+prog_single_snippet_noindent = """\
+more
+smth
+
+<@@snippet1@@>
+hello from snippet1
+<@@/snippet1@@>
+"""
+
 # Test ensuring that multiple snippets can be expanded
 prog_multiple_single_line_snippets = """\
 def foo():
@@ -163,8 +169,6 @@ def foo():
     hello from snippet 2
     #<@@/snippet2@@>"""
 
-
-
 SNIPPETS = {}
 
 
@@ -217,6 +221,7 @@ def expand_snippet(ctx: Context, snippet: str, prefix: str, out: IWriter):
 
     ("utf8", prog_empty_snippet),
     ("utf8", prog_single_snippet),
+    ("utf8", prog_single_snippet_noindent),
     ("utf8", prog_multiple_single_line_snippets),
     ("utf8", prog_multiple_inline_writes),
     ("utf8", prog_multiline_snippet),

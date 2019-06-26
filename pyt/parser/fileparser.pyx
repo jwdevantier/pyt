@@ -123,8 +123,6 @@ cdef int cstr_realloc(cstr *self, size_t n) nogil:
     return 0
 
 cdef int cstr_ncpy_wchar(cstr *self, wchar_t *src, size_t n) nogil:
-    if n == 0:
-        n = wcslen(src)  # does NOT include null terminator
     if n >= self.buflen:
         if cstr_realloc(self, n) != 0:
             return -1
