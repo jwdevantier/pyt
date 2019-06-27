@@ -56,7 +56,7 @@ int wcsenc_realloc(wcsenc self, size_t charlen) {
     size_t bufsiz = (charlen + 1) * sizeof(wchar_t);
     void *new_buf = NULL;
     new_buf = realloc(self->buf, bufsiz);
-    if (new_buf != NULL) {
+    if (new_buf == NULL) {
         perror("wcsenc_realloc: failed to reallocate/expand buffer");
         return -1;
     }
