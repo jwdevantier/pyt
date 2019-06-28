@@ -346,6 +346,8 @@ cdef class Keys(Spec):
             if not key in value:
                 if isinstance(spec, Req):
                     return Invalid
+                if isinstance(spec, Opt):
+                    result[key] = spec.conform(None)
                 continue
             result[key] = spec.conform(value[key])
             if result[key] == Invalid:
