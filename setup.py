@@ -54,7 +54,8 @@ setup(
         Extension("pyt.parser.fileparser", [
             "pyt/parser/fileparser.pyx",
             "pyt/parser/wcsenc.c"]),
-        Extension("pyt.utils.spec.spec", ["pyt/utils/spec/spec.pyx"])
+        Extension("pyt.utils.spec.spec", ["pyt/utils/spec/spec.pyx"]),
+        Extension("pyt.utils.fhash.fhash", ["pyt/utils/fhash/fhash.pyx"]),
     ], annotate=True)
 
 )
