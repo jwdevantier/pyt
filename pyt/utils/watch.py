@@ -1,5 +1,5 @@
 from watchdog.observers import Observer
-from watchdog.events import PatternMatchingEventHandler
+from watchdog.events import RegexMatchingEventHandler
 from time import sleep
 import logging
 
@@ -18,14 +18,14 @@ class Watcher:
     on_created = on_modified = on_moved = on_deleted = None
 
     def __init__(self, conf: Configuration):
-        ev_handler = PatternMatchingEventHandler(
-            patterns=conf.parser.file_patterns,
-            # TODO: expand and hard-code this - the more we filter the better
-            ignore_patterns=self.IGNORE_PATTERNS,
+        ev_handler = RegexMatchingEventHandler(
+            regexes=conf.parser.include_patterns,
+            ignore_regexes=conf.parser.ignore_patterns,
             # Ignore directories, just noise to us.
-            ignore_directories=self.IGNORE_DIRECTORIES,
+            ignore_directories=True,
             # Always enforce case sensitivity.
-            case_sensitive=self.CASE_SENSITIVE)
+            case_sensitive=True
+        )
 
         self.conf = conf
 
@@ -44,7 +44,7 @@ class Watcher:
 
         self._observer = Observer()
         log.info(f"listening to project dir '{conf.project}'")
-        log.info(f"watching for {', '.join(conf.parser.file_patterns)}")
+        log.info(f"watching for {', '.join(conf.parser.include_patterns)}")
         self._observer.schedule(ev_handler, path=str(conf.project), recursive=True)
 
     def __call__(self):
