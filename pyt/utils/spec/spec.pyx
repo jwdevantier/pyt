@@ -73,13 +73,13 @@ cdef class Predicate(Spec):
 
     cdef bint valid(self, object value: t.Any):
         try:
-            return self.predicate(value) == True
+            return self.predicate(value) is not False
         except:
             return False
 
     cdef object explain(self, object value: t.Any):
         try:
-            if self.predicate(value):
+            if self.predicate(value) is not False:
                 return None
             return f"predicate '{self.predicate_name}' failed"
         except:
@@ -87,7 +87,10 @@ cdef class Predicate(Spec):
 
     cdef object conform(self, object value: t.Any):
         try:
-            return self.predicate(value)
+            out = self.predicate(value)
+            if out is False:
+                return Invalid
+            return out
         except:
             return Invalid
 

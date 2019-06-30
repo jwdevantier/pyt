@@ -46,4 +46,33 @@ def test_predicate_int_explain(value, success):
     else:
         assert s.explain(ps, value) == f"predicate 'isint' failed"
 
-# TODO: missing conform
+
+################################################################################
+# Natural Integer Example
+################################################################################
+# Arose from a bug discovered when writing a spec.
+#
+# Success:  any non-False value returned from the predicat function
+#
+#           valid: True
+#           conform: <the actual value>
+#           explain: None
+#
+# Error:    if the predicate function returns False or raises an exception
+#
+#           valid: False
+#           conform: Invalid
+#           explain: <some string explaining the failure>
+
+@pytest.mark.parametrize("input, exp_valid, exp_conform, exp_explain", [
+    (1, True, 1, False),
+    (-1, False, s.Invalid, True)
+])
+def test_natint(input, exp_valid, exp_conform, exp_explain):
+    def _natint(value):
+        value = int(value)
+        return value if value > 0 else False
+    spec = s.predicate(_natint, 'natural integer')
+    assert s.valid(spec, input) == exp_valid, "validation failed"
+    assert s.conform(spec, input) == exp_conform, "conform value is incorrect"
+    assert s.explain(spec, input) == ("predicate 'natural integer' failed" if exp_explain else None)
