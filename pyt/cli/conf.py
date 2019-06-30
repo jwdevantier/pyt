@@ -3,6 +3,7 @@ import yaml
 import typing as t
 from pyt.utils import spec as s
 from pyt.utils.error import PytError
+from multiprocessing import cpu_count
 
 CONF_NAME = "pyt.conf.yml"
 
@@ -14,9 +15,16 @@ PYT_CONF_LOGGING_SPEC = s.keys({
     'datefmt': s.opt(s.str, '%Y-%m-%d %H:%M:%S')
 })
 
+
+def _natint(value):
+    value = int(value)
+    return value if value > 0 else False
+
+
 PYT_CONF_PARSER_SPEC = s.keys({
     'open': s.opt(s.str, '<@@'),
     'close': s.opt(s.str, '@@>'),
+    'cores': s.opt(s.predicate(_natint, 'positive int'), cpu_count()),
     'include_patterns': s.req(s.seqof(s.str)),
     'ignore_patterns': s.opt(s.seqof(s.str), [])
 })
@@ -68,10 +76,12 @@ class ConfParser:
         self.close = conf['close']
         self.include_patterns = conf['include_patterns']
         self.ignore_patterns = conf['ignore_patterns']
+        self.cores = conf['cores']
 
     def __repr__(self):
         return (f"{type(self).__name__}<"
                 f"open: {self.open}, close: {self.close}, "
+                f"cores: {self.cores}, "
                 f"include_patterns: {self.include_patterns}, ignore_patterns: {self.ignore_patterns}>")
 
 
