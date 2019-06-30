@@ -75,7 +75,7 @@ def compile_once(config: Configuration) -> None:
         nonlocal fid
         fid += 1
         out_path = f'/tmp/parse-result.{fid}'
-        out = parser.parse(expand_snippet, entry.path, out_path)
+        out = parser.parse(expand_snippet, entry.path, None)
         if out != 0:
             print(f"parse() => {out} ({pparse.parse_result_err(out)})")
             print(f"in:  {entry.path}")
