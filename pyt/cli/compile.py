@@ -96,7 +96,7 @@ def compile_once_singlecore(config: Configuration) -> None:
 
 def compile_once_mp(config: Configuration) -> None:
     log.info("compile_once_mp selected")
-    cpus = config.parser.cores
+    cpus = config.parser.processes
 
     def target(src: Connection):
         parser = Parser(config.parser.open, config.parser.close)
@@ -141,9 +141,9 @@ def compile_watch(config: Configuration):
 
 
 def compile(config: Configuration, watch: bool) -> None:
-    log.info(f"compile mode: '{'watch' if watch else 'once'}' with {config.parser.cores} CPU cores")
+    log.info(f"compile mode: '{'watch' if watch else 'once'}' with {config.parser.processes} processes")
     log.info(f"compile path '{config.project.absolute().as_posix()}'")
-    if config.parser.cores == 1:
+    if config.parser.processes == 1:
         compile_fn = compile_once_singlecore
     else:
         compile_fn = compile_once_mp

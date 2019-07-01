@@ -24,7 +24,7 @@ def _natint(value):
 PYT_CONF_PARSER_SPEC = s.keys({
     'open': s.opt(s.str, '<@@'),
     'close': s.opt(s.str, '@@>'),
-    'cores': s.opt(s.predicate(_natint, 'positive int'), cpu_count()),
+    'processes': s.opt(s.predicate(_natint, 'positive int'), cpu_count()),
     'include_patterns': s.req(s.seqof(s.str)),
     'ignore_patterns': s.opt(s.seqof(s.str), [])
 })
@@ -76,12 +76,12 @@ class ConfParser:
         self.close = conf['close']
         self.include_patterns = conf['include_patterns']
         self.ignore_patterns = conf['ignore_patterns']
-        self.cores = conf['cores']
+        self.processes = conf['processes']
 
     def __repr__(self):
         return (f"{type(self).__name__}<"
                 f"open: {self.open}, close: {self.close}, "
-                f"cores: {self.cores}, "
+                f"processes: {self.processes}, "
                 f"include_patterns: {self.include_patterns}, ignore_patterns: {self.ignore_patterns}>")
 
 
