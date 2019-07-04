@@ -4,6 +4,7 @@ import typing as t
 from pyt.utils import spec as s
 from pyt.utils.error import PytError
 from multiprocessing import cpu_count
+from os.path import expanduser
 
 CONF_NAME = "pyt.conf.yml"
 
@@ -21,12 +22,63 @@ def _natint(value):
     return value if value > 0 else False
 
 
+def _nonempty(value):
+    try:
+        return value if len(value) != 0 else False
+    except TypeError:
+        return False
+
+
+class Directory(s.SpecBase):
+    """
+
+    Conform resolves '.' to current working directory, '~' to the current user's
+    home directory and relative paths are made absolute in relation to the
+    current working directory.
+    """
+    @classmethod
+    def __value(cls, value: t.Any) -> t.Optional[Path]:
+        try:
+            return Path(expanduser(value)).absolute()
+        except TypeError:
+            return None
+
+    @classmethod
+    def _valid(cls, value: t.Any):
+        return cls._conform(value) is not s.Invalid
+
+    @classmethod
+    def _explain(cls, value: t.Any):
+        path: t.Optional[Path] = cls.__value(value)
+        if not path:
+            return f"expected a path string, got '{type(value)}'"
+        if not path.exists():
+            return f"directory '{path}' does not exist"
+        return None
+
+    @classmethod
+    def _conform(cls, value: t.Any):
+        path: t.Optional[Path] = cls.__value(value)
+        if path and path.exists():
+            print(f"Dir conform '{value}' => '{path}'")
+            return path
+        return s.Invalid
+
+    @staticmethod
+    def _name():
+        return "Directory"
+
+
 PYT_CONF_PARSER_SPEC = s.keys({
     'open': s.opt(s.str, '<@@'),
     'close': s.opt(s.str, '@@>'),
     'processes': s.opt(s.predicate(_natint, 'positive int'), cpu_count()),
     'include_patterns': s.req(s.seqof(s.str)),
-    'ignore_patterns': s.opt(s.seqof(s.str), [])
+    'ignore_patterns': s.opt(s.seqof(s.str), []),
+    'search_paths': s.req(s.allof({
+        'non-empty?': s.predicate(_nonempty, 'non-empty?'),
+        'list of dirs?': s.seqof(Directory())
+    }))
 })
 
 PYT_CONF_SPEC = s.keys({
@@ -69,20 +121,19 @@ class ConfParser:
             raise RuntimeError("LOLCAEK")
         if not s.valid(PYT_CONF_PARSER_SPEC, conf):
             raise SpecError(PYT_CONF_PARSER_SPEC, conf)
-        print("---conf")
-        print(conf)
-        print("///")
         self.open = conf['open']
         self.close = conf['close']
         self.include_patterns = conf['include_patterns']
         self.ignore_patterns = conf['ignore_patterns']
         self.processes = conf['processes']
+        self.search_paths = conf['search_paths']
 
     def __repr__(self):
         return (f"{type(self).__name__}<"
                 f"open: {self.open}, close: {self.close}, "
                 f"processes: {self.processes}, "
-                f"include_patterns: {self.include_patterns}, ignore_patterns: {self.ignore_patterns}>")
+                f"include_patterns: {self.include_patterns}, ignore_patterns: {self.ignore_patterns}"
+                f"search_paths: {self.search_paths}>")
 
 
 class Configuration:
