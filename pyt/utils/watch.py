@@ -26,11 +26,12 @@ class CompileWatcher(AllWatcher):
     def __init__(self, path: str, *, config: Configuration):
         self.ignore_file = or_pattern(config.parser.ignore_patterns)
         self.include_file = or_pattern(config.parser.include_patterns)
+        self.ignore_dir = or_pattern(config.parser.ignore_dir_patterns)
         self.temp_file_suffix = config.parser.temp_file_suffix
         super().__init__(path)
 
     def should_watch_dir(self, entry: DirEntry):
-        return False
+        return self.ignore_dir(entry.path) is None
 
     def should_watch_file(self, entry: DirEntry):
         fpath: str = entry.path

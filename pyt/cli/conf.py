@@ -76,6 +76,7 @@ PYT_CONF_PARSER_SPEC = s.keys({
     'temp_file_suffix': s.opt(s.str, '.tmp.pyt'),
     'include_patterns': s.req(s.seqof(s.str)),
     'ignore_patterns': s.opt(s.seqof(s.str), []),
+    'ignore_dir_patterns': s.opt(s.seqof(s.str), []),
     'search_paths': s.req(s.allof({
         'non-empty?': s.predicate(_nonempty, 'non-empty?'),
         'list of dirs?': s.seqof(Directory())
@@ -128,6 +129,7 @@ class ConfParser:
         self.temp_file_suffix = conf['temp_file_suffix']
         self.include_patterns = conf['include_patterns']
         self.ignore_patterns = conf['ignore_patterns']
+        self.ignore_dir_patterns = conf['ignore_dir_patterns']
         self.search_paths = conf['search_paths']
 
     def __repr__(self):
@@ -136,6 +138,7 @@ class ConfParser:
                 f"processes: {self.processes}, "
                 f"include_patterns: {self.include_patterns}, "
                 f"ignore_patterns: {self.ignore_patterns}, "
+                f"ignore_dir_patterns: {self.ignore_dir_patterns}, "
                 f"search_paths: {self.search_paths}"
                 ">")
 
