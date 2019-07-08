@@ -599,7 +599,7 @@ cdef class Parser:
                 break  # Done, go back to outer state
         return PARSE_OK
 
-    def parse(self, cb: snippet_cb, fname_src: str, fname_dst: t.Optional[str]) -> PARSE_RES:
+    def parse(self, cb: snippet_cb, fname_src: str, fname_dst: t.Optional[str] = None) -> PARSE_RES:
         cdef:
             Context ctx = Context(cb, fname_src, fname_dst)
             size_t parse_result
