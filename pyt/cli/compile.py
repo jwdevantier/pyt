@@ -1,65 +1,46 @@
 import logging
 import os
 import sys
-from re import compile as re_compile
+
 import typing as t
-from multiprocessing import Pipe, Process
-from multiprocessing.connection import Connection
 import multiprocessing as mp
-
 import watchgod
-from watchgod.watcher import Change, AllWatcher
-from typing_extensions import Protocol
-
-from mypy_extensions import KwArg
-from threading import Timer
-from time import time
-from math import ceil
+from watchgod.watcher import Change
 
 from pyt.parser import Parser, Context, PARSE_OK, parse_result_err
 import pyt.parser as pparse
+from pyt.utils.decorators import Debounce
 from pyt.protocols import IWriter
 from pyt.utils.fhash import file_hash
-from pyt.utils import itools
+from pyt.utils.watch import Watcher, CompileWatcher, MPScheduler
 from pyt.cli.conf import Configuration, ConfParser
 
 log = logging.getLogger(__name__)
 
-WatchChangesFn = t.Callable[[str, KwArg(t.Any)], t.Iterator[t.Set[t.Tuple[watchgod.Change, str]]]]
 CompileFn = t.Callable[[Configuration], None]
 Changeset = t.Set[t.Tuple[Change, str]]
-Matcher = t.Callable[[t.Any], t.Optional[t.Match[t.AnyStr]]]
 
 
-def or_pattern(patterns: t.List[str]) -> Matcher:
-    """Compile pattern matching any of the regex strings in `patterns`."""
-    return re_compile('|'.join(f'(?:{entry})' for entry in patterns)).match
+class MPCompiler(MPScheduler):
+    def __init__(self, parser_conf: ConfParser):
+        self.parser_conf = parser_conf
+        super().__init__()
 
+    def _num_processes(self):
+        return self.parser_conf.processes
 
-class CompileWatcher(AllWatcher):
-    def __init__(self, path: str, *, config: Configuration):
-        self.ignore_file = or_pattern(config.parser.ignore_patterns)
-        self.include_file = or_pattern(config.parser.include_patterns)
-        self.temp_file_suffix = config.parser.temp_file_suffix
-        super().__init__(path)
-
-    def should_watch_dir(self, entry: os.DirEntry):
-        return False
-
-    def should_watch_file(self, entry: os.DirEntry):
-        fpath: str = entry.path
-        if fpath.endswith(self.temp_file_suffix) or self.ignore_file(entry.path):
-            return False
-        return self.include_file(entry.path) is not None
-
-
-class Watcher(Protocol):
-
-    def should_watch_dir(self, entry: os.DirEntry) -> bool:
-        ...
-
-    def should_watch_file(self, entry: os.DirEntry) -> bool:
-        ...
+    def _target(self, jobs: mp.connection.Connection):
+        parser = Parser(
+            self.parser_conf.open, self.parser_conf.close,
+            temp_file_suffix=self.parser_conf.temp_file_suffix)
+        fpath: str = jobs.recv()
+        while fpath != "<stop>":
+            log.info(f"received fpath '{fpath}' (type: {type(fpath)})")
+            out = parser.parse(expand_snippet, fpath)  # TODO: ERROR COMES HERE - NONE
+            fpath = jobs.recv()
+            if out:
+                log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
+                log.error(f"in: {fpath}")
 
 
 def dirwalker(w: Watcher, path: str) -> t.Iterator[os.DirEntry]:
@@ -92,99 +73,13 @@ def compile_once_singlecore(config: Configuration, ) -> None:
             log.error(f"in: {entry.path}")
 
 
-class MPScheduler:
-    def __init__(self, parser_conf: ConfParser):
-        self._pipe_snd: t.List[Connection] = []
-        self._pipe_rcv: t.List[Connection] = []
-        self.parser_conf = parser_conf
-        self._procs: t.List[Process] = []
-
-        for n in range(parser_conf.processes):
-            snd, rcv = Pipe()
-            self._pipe_snd.append(snd)
-            self._pipe_rcv.append(rcv)
-
-    def _target(self, jobs: Connection):
-        parser = Parser(
-            self.parser_conf.open, self.parser_conf.close,
-            temp_file_suffix=self.parser_conf.temp_file_suffix)
-        fpath: str = jobs.recv()
-        while fpath != "<stop>":
-            log.info(f"received fpath '{fpath}' (type: {type(fpath)})")
-            out = parser.parse(expand_snippet, fpath)  # TODO: ERROR COMES HERE - NONE
-            fpath = jobs.recv()
-            if out:
-                log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
-                log.error(f"in: {fpath}")
-
-    def _spawn_procs(self):
-        assert self._procs == [], "cannot spawn before cleaning up old processes"
-        for n in range(self.parser_conf.processes):
-            proc = Process(target=self._target, args=(self._pipe_rcv[n],), daemon=True)
-            self._procs.append(proc)
-            proc.start()
-
-    def _kill_procs(self):
-        for fn in itools.join(
-                (lambda: p.send("<stop>") for p in self._pipe_snd),
-                (p.join for p in self._procs)):
-            try:
-                fn()
-            except:
-                pass
-
-    def close(self):
-        self._kill_procs()
-        for fn in itools.join((p.close for p in self._pipe_rcv), (p.close for p in self._pipe_snd)):
-            try:
-                fn()
-            except:
-                pass
-
-    def __enter__(self):
-        log.info("--mp enter--")
-        self._spawn_procs()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        print("--mp exit--")
-        self._kill_procs()
-
-    def submit(self, work: t.Iterable[t.Any]):
-        pipes = itools.cycle(self._pipe_snd)
-        for item in work:
-            next(pipes).send(item)
-
-
 def compile_once_mp(config: Configuration) -> None:
     # TODO: move creation of all three objects one level up.
     root_path = config.project.absolute().as_posix()
     walker = CompileWatcher(root_path, config=config)
-    sched = MPScheduler(config.parser)
+    sched = MPCompiler(config.parser)
     with sched as s:
         s.submit((entry.path for entry in dirwalker(walker, root_path)))
-
-
-class Debounce:
-    def __init__(self, fn: t.Callable):
-        self.fn: t.Callable = fn
-        self.timer: t.Optional[Timer] = None
-        self.elapsed: int = 0
-
-        self.time_start: float = time()  # TODO: remove
-
-    def __call__(self, *args, **kwargs):
-        start: float = time()
-        print(f"COMPILING '{ceil(time() - self.time_start)}'")  # TODO: remove
-        result = self.fn(*args, **kwargs)
-        self.elapsed = ceil(time() - start)
-        return result
-
-    def schedule(self, *args, **kwargs):
-        if self.timer is not None:
-            self.timer.cancel()
-        self.timer = Timer(self.elapsed, lambda: self(*args, **kwargs))
-        self.timer.start()
 
 
 def compile_watch(config: Configuration, compile_fn: CompileFn) -> None:

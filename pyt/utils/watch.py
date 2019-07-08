@@ -1,58 +1,113 @@
-from watchdog.observers import Observer
-from watchdog.events import RegexMatchingEventHandler
-from time import sleep
+from multiprocessing import Pipe, Process
+from multiprocessing.connection import Connection
+from os import DirEntry
 import logging
+import typing as t
+from abc import ABC, abstractmethod
 
-from pyt.cli.conf import Configuration
+from re import compile as re_compile
+from typing_extensions import Protocol
+from watchgod.watcher import AllWatcher
+
+from pyt.utils import itools
+from pyt.cli.conf import Configuration, ConfParser
 
 log = logging.getLogger(__name__)
 
+Matcher = t.Callable[[t.Any], t.Optional[t.Match[t.AnyStr]]]
 
-# TODO: should move more of this to the Configuration
-class Watcher:
-    IGNORE_PATTERNS = ""
-    IGNORE_DIRECTORIES = True
-    CASE_SENSITIVE = True
 
-    # will be functions taking a single 'event' argument
-    on_created = on_modified = on_moved = on_deleted = None
+def or_pattern(patterns: t.List[str]) -> Matcher:
+    """Compile pattern matching any of the regex strings in `patterns`."""
+    return re_compile('|'.join(f'(?:{entry})' for entry in patterns)).match
 
-    def __init__(self, conf: Configuration):
-        ev_handler = RegexMatchingEventHandler(
-            regexes=conf.parser.include_patterns,
-            ignore_regexes=conf.parser.ignore_patterns,
-            # Ignore directories, just noise to us.
-            ignore_directories=True,
-            # Always enforce case sensitivity.
-            case_sensitive=True
-        )
 
-        self.conf = conf
+class CompileWatcher(AllWatcher):
+    def __init__(self, path: str, *, config: Configuration):
+        self.ignore_file = or_pattern(config.parser.ignore_patterns)
+        self.include_file = or_pattern(config.parser.include_patterns)
+        self.temp_file_suffix = config.parser.temp_file_suffix
+        super().__init__(path)
 
-        if hasattr(self, 'on_created') and callable(self.on_created):
-            log.debug("watcher: found 'on_created' handler")
-            ev_handler.on_created = self.on_created
-        if hasattr(self, 'on_modified') and callable(self.on_modified):
-            log.debug("watcher: found 'on_modified' handler")
-            ev_handler.on_modified = self.on_modified
-        if hasattr(self, 'on_moved') and callable(self.on_moved):
-            log.debug("watcher: found 'on_moved' handler")
-            ev_handler.on_moved = self.on_moved
-        if hasattr(self, 'on_deleted') and callable(self.on_deleted):
-            log.debug("watcher: found 'on_deleted' handler")
-            ev_handler.on_deleted = self.on_deleted
+    def should_watch_dir(self, entry: DirEntry):
+        return False
 
-        self._observer = Observer()
-        log.info(f"listening to project dir '{conf.project}'")
-        log.info(f"watching for {', '.join(conf.parser.include_patterns)}")
-        self._observer.schedule(ev_handler, path=str(conf.project), recursive=True)
+    def should_watch_file(self, entry: DirEntry):
+        fpath: str = entry.path
+        if fpath.endswith(self.temp_file_suffix) or self.ignore_file(entry.path):
+            return False
+        return self.include_file(entry.path) is not None
 
-    def __call__(self):
-        self._observer.start()
-        log.info(f"watching '{self.conf.project}'...")
-        try:
-            while True:
-                sleep(1)
-        except KeyboardInterrupt:
-            self._observer.stop()
-        self._observer.join()
+
+class Watcher(Protocol):
+
+    def should_watch_dir(self, entry: DirEntry) -> bool:
+        ...
+
+    def should_watch_file(self, entry: DirEntry) -> bool:
+        ...
+
+
+class MPScheduler(ABC):
+    def __init__(self):
+        self._pipe_snd: t.List[Connection] = []
+        self._pipe_rcv: t.List[Connection] = []
+        self._procs: t.List[Process] = []
+
+        for n in range(self.num_processes):
+            snd, rcv = Pipe()
+            self._pipe_snd.append(snd)
+            self._pipe_rcv.append(rcv)
+
+    @abstractmethod
+    def _target(self, jobs: Connection):
+        """the starting point of the worker process"""
+        ...
+
+    @property
+    def num_processes(self):
+        """return number of processes to have in pool"""
+        return self._num_processes()
+
+    @abstractmethod
+    def _num_processes(self) -> int:
+        """return number of processes to have in pool"""
+        ...
+
+    def _spawn_procs(self):
+        assert self._procs == [], "cannot spawn before cleaning up old processes"
+        for n in range(self.num_processes):
+            proc = Process(target=self._target, args=(self._pipe_rcv[n],), daemon=True)
+            self._procs.append(proc)
+            proc.start()
+
+    def _kill_procs(self):
+        for fn in itools.join(
+                (lambda: p.send("<stop>") for p in self._pipe_snd),
+                (p.join for p in self._procs)):
+            try:
+                fn()
+            except:
+                pass
+
+    def close(self):
+        self._kill_procs()
+        for fn in itools.join((p.close for p in self._pipe_rcv), (p.close for p in self._pipe_snd)):
+            try:
+                fn()
+            except:
+                pass
+
+    def __enter__(self):
+        log.info("--mp enter--")
+        self._spawn_procs()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print("--mp exit--")
+        self._kill_procs()
+
+    def submit(self, work: t.Iterable[t.Any]):
+        pipes = itools.cycle(self._pipe_snd)
+        for item in work:
+            next(pipes).send(item)
