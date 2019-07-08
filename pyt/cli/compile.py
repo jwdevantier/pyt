@@ -1,37 +1,74 @@
 import logging
 import os
+import sys
 from re import compile as re_compile
-from watchdog.events import (FileModifiedEvent, FileMovedEvent, FileDeletedEvent)
 import typing as t
-from multiprocessing import cpu_count, Pipe, Process
+from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
+import multiprocessing as mp
 
-from pyt.utils import watch
+import watchgod
+from watchgod.watcher import Change, AllWatcher
+from typing_extensions import Protocol
+
+from mypy_extensions import KwArg
+from threading import Timer
+from time import time
+from math import ceil
+
 from pyt.parser import Parser, Context, PARSE_OK, parse_result_err
 import pyt.parser as pparse
 from pyt.protocols import IWriter
 from pyt.utils.fhash import file_hash
-from pyt.cli.conf import Configuration
+from pyt.utils import itools
+from pyt.cli.conf import Configuration, ConfParser
 
 log = logging.getLogger(__name__)
 
+WatchChangesFn = t.Callable[[str, KwArg(t.Any)], t.Iterator[t.Set[t.Tuple[watchgod.Change, str]]]]
+CompileFn = t.Callable[[Configuration], None]
+Changeset = t.Set[t.Tuple[Change, str]]
+Matcher = t.Callable[[t.Any], t.Optional[t.Match[t.AnyStr]]]
 
-def _file_map(fn: t.Callable, path: str, ignore_file: t.Callable, include_file: t.Callable, ):
+
+def or_pattern(patterns: t.List[str]) -> Matcher:
+    """Compile pattern matching any of the regex strings in `patterns`."""
+    return re_compile('|'.join(f'(?:{entry})' for entry in patterns)).match
+
+
+class CompileWatcher(AllWatcher):
+    def __init__(self, path: str, *, config: Configuration):
+        self.ignore_file = or_pattern(config.parser.ignore_patterns)
+        self.include_file = or_pattern(config.parser.include_patterns)
+        self.temp_file_suffix = config.parser.temp_file_suffix
+        super().__init__(path)
+
+    def should_watch_dir(self, entry: os.DirEntry):
+        return False
+
+    def should_watch_file(self, entry: os.DirEntry):
+        fpath: str = entry.path
+        if fpath.endswith(self.temp_file_suffix) or self.ignore_file(entry.path):
+            return False
+        return self.include_file(entry.path) is not None
+
+
+class Watcher(Protocol):
+
+    def should_watch_dir(self, entry: os.DirEntry) -> bool:
+        ...
+
+    def should_watch_file(self, entry: os.DirEntry) -> bool:
+        ...
+
+
+def dirwalker(w: Watcher, path: str) -> t.Iterator[os.DirEntry]:
     for entry in os.scandir(path):
         if entry.is_dir():
-            yield from _file_map(fn, entry.path, ignore_file, include_file)
-        elif ignore_file(entry.path):
-            continue
-        elif include_file(entry.path):
-            log.debug(f"match: '{entry.path}'")
-            yield fn(entry)
-
-
-def file_map(fn: t.Callable, path: str, ignore_patterns: t.List[str], include_patterns: t.List[str]):
-    ignore_file = re_compile('|'.join(f'(?:{entry})' for entry in ignore_patterns)).match
-    include_file = re_compile('|'.join(f'(?:{entry})' for entry in include_patterns)).match
-
-    return _file_map(fn, path, ignore_file, include_file)
+            if w.should_watch_dir(entry):
+                yield from dirwalker(w, entry.path)
+        elif w.should_watch_file(entry):
+            yield entry
 
 
 def expand_snippet(ctx: Context, snippet: str, prefix: str, out: IWriter):
@@ -39,114 +76,170 @@ def expand_snippet(ctx: Context, snippet: str, prefix: str, out: IWriter):
     out.write(f"{prefix}something more")
 
 
-# TODO: new file created and populated, on_created only or ALSO on_modified?
-#       (hypothesis - only listen for on_modified, on_deleted and on_moved to know all)
-class CompileWatcher(watch.Watcher):
-    def __init__(self, config: Configuration, fmap: t.Dict[str, str]):
-        super().__init__(config)
-        self._parser = Parser(self.conf.parser.open, self.conf.parser.close)
-        self._file_hashes = fmap
+# TODO: revamp compile fns into small objects (resource allocation)
 
-    def on_modified(self, event: FileModifiedEvent):
-        old_hash = self._file_hashes.get(event.src_path, '')
-        new_hash = file_hash(event.src_path)
-        if old_hash == new_hash:
-            return
-
-        parse_res = self._parser.parse(expand_snippet, event.src_path, None)
-        if parse_res != PARSE_OK:
-            log.error(f"Parsing of '{event.src_path}' failed: {parse_result_err(parse_res)}")
-            return
-        self._file_hashes[event.src_path] = file_hash(event.src_path)
-
-    def on_moved(self, event: FileMovedEvent):
-        # Do we care ? The file shouldn't necessarily have changed
-        if event.src_path not in self._file_hashes:
-            return
-        self._file_hashes[event.dest_path] = self._file_hashes[event.src_path]
-        self._file_hashes.pop(event.src_path, None)
-
-    def on_deleted(self, event: FileDeletedEvent):
-        self._file_hashes.pop(event.src_path, None)
-
-
-def compile_once_singlecore(config: Configuration) -> None:
-    log.info("compile_once_singlecore selected")
-    parser = Parser(config.parser.open, config.parser.close)
-    fid = 0
-
-    def parse_file(entry: os.DirEntry):
-        nonlocal fid
-        fid += 1
-        out_path = f'/tmp/parse-result.{fid}'
-        out = parser.parse(expand_snippet, entry.path, None)
+def compile_once_singlecore(config: Configuration, ) -> None:
+    # TODO: make walker outside this fn
+    root_path: str = config.project.absolute().as_posix()
+    walker = CompileWatcher(root_path, config=config)
+    parser = Parser(
+        config.parser.open, config.parser.close,
+        temp_file_suffix=config.parser.temp_file_suffix)
+    for entry in dirwalker(walker, root_path):
+        out = parser.parse(expand_snippet, entry.path)
         if out != 0:
-            print(f"parse() => {out} ({pparse.parse_result_err(out)})")
-            print(f"in:  {entry.path}")
-            print(f"out: {out_path}")
-        else:
-            log.debug(f"parse() => {out} {file_hash(out_path)}")
+            log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
+            log.error(f"in: {entry.path}")
 
-    log.info(f"compile path '{config.project.absolute().as_posix()}'")
-    list(file_map(
-        parse_file, config.project.absolute().as_posix(),
-        config.parser.ignore_patterns, config.parser.include_patterns))
-    print(f"parsed {fid} files.")
+
+class MPScheduler:
+    def __init__(self, parser_conf: ConfParser):
+        self._pipe_snd: t.List[Connection] = []
+        self._pipe_rcv: t.List[Connection] = []
+        self.parser_conf = parser_conf
+        self._procs: t.List[Process] = []
+
+        for n in range(parser_conf.processes):
+            snd, rcv = Pipe()
+            self._pipe_snd.append(snd)
+            self._pipe_rcv.append(rcv)
+
+    def _target(self, jobs: Connection):
+        parser = Parser(
+            self.parser_conf.open, self.parser_conf.close,
+            temp_file_suffix=self.parser_conf.temp_file_suffix)
+        fpath: str = jobs.recv()
+        while fpath != "<stop>":
+            log.info(f"received fpath '{fpath}' (type: {type(fpath)})")
+            out = parser.parse(expand_snippet, fpath)  # TODO: ERROR COMES HERE - NONE
+            fpath = jobs.recv()
+            if out:
+                log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
+                log.error(f"in: {fpath}")
+
+    def _spawn_procs(self):
+        assert self._procs == [], "cannot spawn before cleaning up old processes"
+        for n in range(self.parser_conf.processes):
+            proc = Process(target=self._target, args=(self._pipe_rcv[n],), daemon=True)
+            self._procs.append(proc)
+            proc.start()
+
+    def _kill_procs(self):
+        for fn in itools.join(
+                (lambda: p.send("<stop>") for p in self._pipe_snd),
+                (p.join for p in self._procs)):
+            try:
+                fn()
+            except:
+                pass
+
+    def close(self):
+        self._kill_procs()
+        for fn in itools.join((p.close for p in self._pipe_rcv), (p.close for p in self._pipe_snd)):
+            try:
+                fn()
+            except:
+                pass
+
+    def __enter__(self):
+        log.info("--mp enter--")
+        self._spawn_procs()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print("--mp exit--")
+        self._kill_procs()
+
+    def submit(self, work: t.Iterable[t.Any]):
+        pipes = itools.cycle(self._pipe_snd)
+        for item in work:
+            next(pipes).send(item)
 
 
 def compile_once_mp(config: Configuration) -> None:
-    log.info("compile_once_mp selected")
-    cpus = config.parser.processes
-
-    def target(src: Connection):
-        parser = Parser(config.parser.open, config.parser.close)
-        fpath: t.Optional[str] = src.recv()
-        while fpath:
-            # print(f"got item '{fpath}'")
-            out = parser.parse(expand_snippet, fpath, None)
-            if out != 0:
-                print(f"Parse error")
-            fpath = src.recv()
-        # exits on encountering 'None'
-
-    procs = []
-    src_pipes = []
-    for n in range(cpus):
-        src, dst = Pipe()
-        proc = Process(target=target, args=(dst,))
-        proc.daemon = True
-        proc.start()
-        dst.close()
-
-        procs.append(proc)
-        src_pipes.append(src)
-
-    files = file_map(
-        lambda entry: entry.path, config.project.absolute().as_posix(),
-        config.parser.ignore_patterns, config.parser.include_patterns)
-
-    def current_pipes_gen() -> t.Iterator[Connection]:
-        while True:
-            for pipe in src_pipes:
-                yield pipe
-
-    src_gen = current_pipes_gen()
-    for entry_path in files:
-        next(src_gen).send(entry_path)
+    # TODO: move creation of all three objects one level up.
+    root_path = config.project.absolute().as_posix()
+    walker = CompileWatcher(root_path, config=config)
+    sched = MPScheduler(config.parser)
+    with sched as s:
+        s.submit((entry.path for entry in dirwalker(walker, root_path)))
 
 
-def compile_watch(config: Configuration):
-    w = CompileWatcher(config, {})
-    w()
+class Debounce:
+    def __init__(self, fn: t.Callable):
+        self.fn: t.Callable = fn
+        self.timer: t.Optional[Timer] = None
+        self.elapsed: int = 0
+
+        self.time_start: float = time()  # TODO: remove
+
+    def __call__(self, *args, **kwargs):
+        start: float = time()
+        print(f"COMPILING '{ceil(time() - self.time_start)}'")  # TODO: remove
+        result = self.fn(*args, **kwargs)
+        self.elapsed = ceil(time() - start)
+        return result
+
+    def schedule(self, *args, **kwargs):
+        if self.timer is not None:
+            self.timer.cancel()
+        self.timer = Timer(self.elapsed, lambda: self(*args, **kwargs))
+        self.timer.start()
+
+
+def compile_watch(config: Configuration, compile_fn: CompileFn) -> None:
+    compile: Debounce = Debounce(compile_fn)
+    # TODO: write FHASH functionality - filter changed list through fhash - schedule iff len(filter(fhash)) != 0
+
+    compile(config)
+    # should be fpath => hash (because there may be identical files)
+    fmap: t.Dict[str, str] = {}
+
+    log.info(f"Watching: {config.project.absolute().as_posix()}")
+
+    def filer_changeset(changeset: Changeset) -> t.Iterator[t.Tuple[Change, str]]:
+        nonlocal fmap
+        for typ, fpath in changeset:
+            if typ == Change.modified:
+                new_hash = file_hash(fpath)
+                old_hash = fmap.get(fpath, None)
+                if new_hash != old_hash:
+                    fmap[fpath] = new_hash
+                    yield typ, fpath
+            elif typ == Change.added:
+                fmap[fpath] = file_hash(fpath)
+                yield typ, fpath
+            elif typ == Change.deleted:
+                fmap.pop(fpath, None)
+
+    for changes in watchgod.watch(
+            config.project.absolute().as_posix(),
+            watcher_cls=CompileWatcher,
+            watcher_kwargs={'config': config}):
+        real_changes = list(filer_changeset(changes))
+        if real_changes:
+            print("REAL CHANGES")
+            print(real_changes)
+            compile.schedule(config)
 
 
 def compile(config: Configuration, watch: bool) -> None:
     log.info(f"compile mode: '{'watch' if watch else 'once'}' with {config.parser.processes} processes")
     log.info(f"compile path '{config.project.absolute().as_posix()}'")
+    log.info("Config:")
+    log.info(config)
+
+    compile_fn: CompileFn
     if config.parser.processes == 1:
         compile_fn = compile_once_singlecore
     else:
+        # TODO - move start_method choice to config
+        mp.set_start_method('forkserver')
         compile_fn = compile_once_mp
-    compile_fn(config)
-    if watch:
-        compile_watch(config)
+
+    # single pass then exit
+    if not watch:
+        compile_fn(config)
+        sys.exit(0)
+
+    compile_watch(config, compile_fn)
