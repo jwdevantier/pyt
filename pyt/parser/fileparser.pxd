@@ -55,6 +55,8 @@ cdef class Parser:
     cdef FILE *fh_in
     cdef FILE *fh_out
 
+    cdef str temp_file_suffix
+
     # buffer holding the name of the temporary file made iff
     # input and eventual output file are the same (in-place writing)
     cdef cstr *tmp_file_path

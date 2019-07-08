@@ -73,6 +73,7 @@ PYT_CONF_PARSER_SPEC = s.keys({
     'open': s.opt(s.str, '<@@'),
     'close': s.opt(s.str, '@@>'),
     'processes': s.opt(s.predicate(_natint, 'positive int'), cpu_count()),
+    'temp_file_suffix': s.opt(s.str, '.tmp.pyt'),
     'include_patterns': s.req(s.seqof(s.str)),
     'ignore_patterns': s.opt(s.seqof(s.str), []),
     'search_paths': s.req(s.allof({
@@ -123,9 +124,10 @@ class ConfParser:
             raise SpecError(PYT_CONF_PARSER_SPEC, conf)
         self.open = conf['open']
         self.close = conf['close']
+        self.processes = conf['processes']
+        self.temp_file_suffix = conf['temp_file_suffix']
         self.include_patterns = conf['include_patterns']
         self.ignore_patterns = conf['ignore_patterns']
-        self.processes = conf['processes']
         self.search_paths = conf['search_paths']
 
     def __repr__(self):

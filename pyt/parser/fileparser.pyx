@@ -64,12 +64,12 @@ cdef extern from "wcsenc.h" nogil:
 ################################################################################
 ## Utils
 ################################################################################
-def tmp_file(path):
+cdef str tmp_file(str path, str suffix):
     in_dir = os_path_dirname(path)
     fname = f"{os_path_basename(path)}."
 
     tf = tempfile.NamedTemporaryFile(
-        dir=in_dir, prefix=fname, suffix='.tmp', delete=False)
+        dir=in_dir, prefix=fname, suffix=suffix, delete=False)
     fname = tf.name
     tf.close()
     return fname
@@ -310,6 +310,7 @@ cdef class Parser:
     def __init__(
             self,
             tag_open: str = '<@@', tag_close: str = '@@>',
+            temp_file_suffix: str = '.pyt.tmp',
             size_t buf_len_line = BUF_LINE_LEN,
             size_t buf_snippet_name_len = BUF_SNIPPET_NAME_LEN,
             size_t buf_indent_by_len = BUF_INDENT_BY_LEN):
@@ -317,6 +318,8 @@ cdef class Parser:
 
         if buf_len_line <= 0:
             raise ValueError("buf_len_line must be positive")
+
+        self.temp_file_suffix = temp_file_suffix
 
         #self.tmp_file_path = CString(250)
         self.tmp_file_path = cstr_new(250)
@@ -367,7 +370,7 @@ cdef class Parser:
         # If overwriting the input file - generate a tempfile for output
         cstr_reset(self.tmp_file_path)
         if not fpath_dst:
-            fpath_dst = tmp_file(fpath_src)
+            fpath_dst = tmp_file(fpath_src, self.temp_file_suffix)
             if cstr_ncpy_unicode(self.tmp_file_path, fpath_dst, len(fpath_dst)) != 0:
                 raise MemoryError("failed to copy string to tmp_file_path")
 
