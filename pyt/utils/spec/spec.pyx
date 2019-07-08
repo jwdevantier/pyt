@@ -125,11 +125,14 @@ cdef class AllOf(Spec):
         return errors
 
     cdef object conform(self, object value: t.Any):
-        cdef Spec spec
+        cdef:
+            Spec spec
+            object val = value
         for spec in self.specs.values():
-            if spec.conform(value) == Invalid:
+            val = spec.conform(val)
+            if val == Invalid:
                 return Invalid
-        return value  # How else can one conform to all?
+        return val
 
     cdef str name(self):
         return f"all<{', '.join(self.specs.keys())}>"
