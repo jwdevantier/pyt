@@ -134,8 +134,10 @@ class ConfParser:
         return (f"{type(self).__name__}<"
                 f"open: {self.open}, close: {self.close}, "
                 f"processes: {self.processes}, "
-                f"include_patterns: {self.include_patterns}, ignore_patterns: {self.ignore_patterns}"
-                f"search_paths: {self.search_paths}>")
+                f"include_patterns: {self.include_patterns}, "
+                f"ignore_patterns: {self.ignore_patterns}, "
+                f"search_paths: {self.search_paths}"
+                ">")
 
 
 class Configuration:
