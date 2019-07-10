@@ -5,7 +5,7 @@ from libc.locale cimport setlocale, LC_ALL
 from libc.stdio cimport (fopen, fclose, fwrite, fflush, feof, perror, FILE, fseek, fread)
 import tempfile
 from os.path import dirname as os_path_dirname, basename as os_path_basename
-from os import replace as os_replace
+from os import replace as os_replace, remove as os_remove
 import typing as t
 import logging
 
@@ -310,7 +310,9 @@ cdef class Parser:
     def __init__(
             self,
             tag_open: str = '<@@', tag_close: str = '@@>',
+            *,
             temp_file_suffix: str = '.pyt.tmp',
+            object should_replace_file,
             size_t buf_len_line = BUF_LINE_LEN,
             size_t buf_snippet_name_len = BUF_SNIPPET_NAME_LEN,
             size_t buf_indent_by_len = BUF_INDENT_BY_LEN):
@@ -320,6 +322,7 @@ cdef class Parser:
             raise ValueError("buf_len_line must be positive")
 
         self.temp_file_suffix = temp_file_suffix
+        self.should_replace_file = should_replace_file
 
         #self.tmp_file_path = CString(250)
         self.tmp_file_path = cstr_new(250)
@@ -618,5 +621,7 @@ cdef class Parser:
             if self.fh_in != NULL:
                 fclose(self.fh_in)
                 self.fh_in = NULL
-            if fname_dst is None and parse_result == PARSE_OK:
+            if fname_dst is None and parse_result == PARSE_OK and self.should_replace_file(self.tmp_file_path.ptr, fname_src):
                 os_replace(self.tmp_file_path.ptr, fname_src)
+            else:
+                os_remove(self.tmp_file_path.ptr)

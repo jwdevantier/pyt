@@ -38,8 +38,10 @@ cdef extern from "wcsenc.h" nogil:
         pass
 
 snippet_cb = t.Callable[[Context, IWriter], None]
+#should_replace_file_cb = t.Callable[[str, str], bool]
 
 ctypedef void* c_snippet_cb
+#ctypedef void* c_should_replace_file_cb
 
 cdef class FileWriter:
     cdef FILE *out
@@ -56,6 +58,7 @@ cdef class Parser:
     cdef FILE *fh_out
 
     cdef str temp_file_suffix
+    cdef object should_replace_file
 
     # buffer holding the name of the temporary file made iff
     # input and eventual output file are the same (in-place writing)
