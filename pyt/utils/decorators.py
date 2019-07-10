@@ -14,6 +14,7 @@ class Debounce:
     The wait time is self-adjusting and based on the last call to the function.
     It is thus best suitable to functions with relatively predictable execution
     speeds."""
+
     def __init__(self, fn: t.Callable):
         self.fn: t.Callable = fn
         self.timer: t.Optional[Timer] = None
