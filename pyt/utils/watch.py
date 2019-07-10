@@ -90,6 +90,7 @@ class MPScheduler(ABC):
                 fn()
             except:
                 pass
+        self._procs = []
 
     def close(self):
         self._kill_procs()
