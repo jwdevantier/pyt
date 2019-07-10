@@ -101,12 +101,10 @@ class MPScheduler(ABC):
                 pass
 
     def __enter__(self):
-        log.info("--mp enter--")
         self._spawn_procs()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        print("--mp exit--")
         self._kill_procs()
 
     def submit(self, work: t.Iterable[t.Any]):

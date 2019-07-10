@@ -60,7 +60,6 @@ class Directory(s.SpecBase):
     def _conform(cls, value: t.Any):
         path: t.Optional[Path] = cls.__value(value)
         if path and path.exists():
-            print(f"Dir conform '{value}' => '{path}'")
             return path
         return s.Invalid
 

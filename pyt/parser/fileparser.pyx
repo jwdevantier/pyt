@@ -609,8 +609,6 @@ cdef class Parser:
             parse_result = self.doparse(ctx)
             return parse_result
         finally:
-            # TODO: if temporary file, rename/move
-            #print("TODO: iff. using tempfile - rename/overwrite old file")
             if fflush(self.fh_out) != 0:
                 print("pyterror - flushing failed")
                 raise PytError("flushing output failed!")
