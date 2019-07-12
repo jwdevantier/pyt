@@ -5,11 +5,13 @@ import sys
 import typing as t
 import multiprocessing as mp
 from multiprocessing import Process
+from importlib import import_module
 
 import watchgod
 from watchgod.watcher import Change
+import colorama as clr
 
-from pyt.parser import Parser, Context, PARSE_OK, parse_result_err
+from pyt.parser import Parser, Context, PARSE_OK, parse_result_err, PytSnippetError
 import pyt.parser as pparse
 from pyt.utils.decorators import Debounce
 from pyt.protocols import IWriter
@@ -32,9 +34,91 @@ def dirwalker(w: Watcher, path: str) -> t.Iterator[os.DirEntry]:
             yield entry
 
 
+def parse_snippet_name(snippet_fqn: str) -> t.Tuple[str, str]:
+    parts = snippet_fqn.split('.')
+    if len(parts) == 1:
+        return "<none>", parts[0]
+    else:
+        return '.'.join(parts[:-1]), parts[-1]
+
+
+class SnippetError(Exception):
+    def __init__(self, snippet_fqn: str, message: str):
+        """
+
+        Parameters
+        ----------
+        snippet_fqn : str
+            Fully-qualified name of snippet, e.g. `foo.bar.baz.mysnippet`
+        message : str
+            The exception error message
+        """
+        self.module, self.fn_name = parse_snippet_name(snippet_fqn)
+
+        self.message = message
+        super().__init__(self.message)
+
+
+class InvalidSnippetName(SnippetError):
+    def __init__(self, snippet_fqn: str):
+        super().__init__(
+            snippet_fqn,
+            f"snippet name invalid - should be of form 'path.to.module.fn_name'")
+
+
+class SnippetModuleNotFoundError(SnippetError):
+    def __init__(self, snippet_fqn: str):
+        mod, fn_name = parse_snippet_name(snippet_fqn)
+        self.search_paths = sys.path
+        super().__init__(
+            snippet_fqn,
+            f"module '{mod}' not found - maybe you have a typo or not all search paths have been added")
+
+
+class SnippetNotFoundError(SnippetError):
+    def __init__(self, snippet_fqn: str):
+        mod, fn_name = parse_snippet_name(snippet_fqn)
+        super().__init__(
+            snippet_fqn,
+            f"snippet '{fn_name}' not found in module '{mod}'")
+
+
+class SnippetFunctionSignatureError(SnippetError):
+    def __init__(self, snippet_fqn: str):
+        super().__init__(
+            snippet_fqn,
+            f"incorrect snippet function signature, must be: '<snippet name>(ctx: Context, prefix: str, out: Writer)'")
+
+
+class SnippetUnhandledExceptionError(SnippetError):
+    def __init__(self, snippet_fqn: str):
+        super().__init__(
+            snippet_fqn,
+            f"Unhandled exception")
+
+
 def expand_snippet(ctx: Context, snippet: str, prefix: str, out: IWriter):
-    out.write(f"{prefix}look out!\n")
-    out.write(f"{prefix}something more")
+    mod_name, fn_name = parse_snippet_name(snippet)
+    if mod_name == "<none>":
+        raise InvalidSnippetName(snippet)
+    log.debug(f"expanding {snippet} (fn: {fn_name}, module: {mod_name})")
+    try:
+        mod = import_module(mod_name)
+    except ModuleNotFoundError as e:
+        raise SnippetModuleNotFoundError(snippet) from e
+    try:
+        snippet_fn = getattr(mod, fn_name)
+    except AttributeError as e:
+        raise SnippetNotFoundError(snippet) from e
+    try:
+        snippet_fn(ctx, prefix, out)
+    except TypeError as e:
+        if str(e).startswith(f"{fn_name}()"):
+            raise SnippetFunctionSignatureError(snippet) from e
+        else:
+            raise SnippetUnhandledExceptionError(snippet) from e
+    except Exception as e:
+        raise SnippetUnhandledExceptionError(snippet) from e
 
 
 class FileChecksums:
@@ -81,6 +165,34 @@ class FileChecksums:
                 fmap.pop(fpath, None)
 
 
+def print_snippet_error(e: PytSnippetError) -> None:
+    """
+    Print formatted error message, summarizing the details leading to a snippet expansion error.
+    Parameters
+    ----------
+    e : PytSnippetError
+
+    Returns
+    -------
+        None
+    """
+    if not isinstance(e.cause, SnippetError):
+        log.info(f"unhandled error (type: {type(e).__name__} while parsing snippet")
+        raise e
+
+    cause: SnippetError = e.cause
+    if cause.__cause__ and isinstance(cause, SnippetUnhandledExceptionError):
+        error = str(cause.__cause__)
+    else:
+        error = cause.message
+    log.info(f"""\
+{clr.Style.BRIGHT}{clr.Fore.RED}Error parsing snippet {clr.Fore.MAGENTA}{cause.module}.{cause.fn_name}{clr.Fore.RED}:{clr.Style.RESET_ALL}
+\t{clr.Fore.MAGENTA}{clr.Style.BRIGHT}Used at:{clr.Style.RESET_ALL} {e.file} (ending at line: {e.line_num})
+\t{clr.Fore.MAGENTA}{clr.Style.BRIGHT}Snippet:{clr.Style.RESET_ALL} from {cause.module} import {cause.fn_name}
+\t{clr.Fore.MAGENTA}{clr.Style.BRIGHT}Reason:{clr.Style.RESET_ALL}  {error}
+""")
+
+
 class MPCompiler(MPScheduler):
     def __init__(self,
                  parser_conf: ConfParser,
@@ -97,28 +209,35 @@ class MPCompiler(MPScheduler):
             self.parser_conf.open, self.parser_conf.close,
             temp_file_suffix=self.parser_conf.temp_file_suffix,
             should_replace_file=self.should_replace)
-        # TODO: expand sys.path
+        sys.path.extend(self.parser_conf.search_paths)
         fpath: str = jobs.recv()
         while fpath != "<stop>":
             log.info(f"received fpath '{fpath}' (type: {type(fpath)})")
-            out = parser.parse(expand_snippet, fpath)
+            try:
+                out = parser.parse(expand_snippet, fpath)
+                if out:
+                    log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
+                    log.error(f"in: {fpath}")
+            except PytSnippetError as e:
+                print_snippet_error(e)
             fpath = jobs.recv()
-            if out:
-                log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
-                log.error(f"in: {fpath}")
 
 
-def do_compile_singlecore(parser: ConfParser, walker: CompileWatcher, should_replace: t.Callable[[str, str], bool]):
+def do_compile_singlecore(parser_conf: ConfParser, walker: CompileWatcher,
+                          should_replace: t.Callable[[str, str], bool]):
     parser = Parser(
-        parser.open, parser.close,
-        temp_file_suffix=parser.temp_file_suffix,
-        should_replace_file=should_replace)  # TODO: wrong - should provide fdb too
-    # TODO: expand-snippet, expand sys.path
+        parser_conf.open, parser_conf.close,
+        temp_file_suffix=parser_conf.temp_file_suffix,
+        should_replace_file=should_replace)
+    sys.path.extend(parser_conf.search_paths)
     for entry in dirwalker(walker, walker.root_path):
-        out = parser.parse(expand_snippet, entry.path)
-        if out != 0:
-            log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
-            log.error(f"in: {entry.path}")
+        try:
+            out = parser.parse(expand_snippet, entry.path)
+            if out != 0:
+                log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
+                log.error(f"in: {entry.path}")
+        except PytSnippetError as e:
+            print_snippet_error(e)
 
 
 def should_always_replace(tmp: str, orig: str):
