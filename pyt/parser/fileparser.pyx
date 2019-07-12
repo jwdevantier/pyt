@@ -78,6 +78,27 @@ cdef str tmp_file(str path, str suffix):
 class PytError(Exception):
     pass
 
+class PytSnippetError(PytError):
+    def __init__(self,
+                 snippet_name: str,
+                 line_num: int,
+                 ctx: Context,
+                 *,
+                 reason="Error parsing snippet"):
+        self.snippet_name = snippet_name
+        self.line_num = line_num
+        self.file = ctx.src
+        self.environment = ctx.env
+        self.reason = reason
+        super().__init__(self.reason)
+
+    @property
+    def cause(self):
+        return getattr(self, '__cause__', self.reason)
+
+    def __repr__(self):
+        return f"{self.file}:{self.line_num} error expanding snippet '{self.snippet_name}': {self.cause}"
+
 
 ################################################################################
 ## CString
@@ -534,6 +555,7 @@ cdef class Parser:
             n_total_read += n_iter_read
             start = self.line.ptr + n_total_read
             buflen = self.line.buflen - n_total_read
+        self.line_num += 1
         return READ_OK
 
     cdef int writeline(self) nogil:
@@ -541,22 +563,28 @@ cdef class Parser:
             wchar_t *line_ptr = self.line.ptr
         return file_write(self.fh_out, self.encoder, line_ptr, self.line.strlen)
 
-    cdef void expand_snippet(self, Context ctx):
+    cdef int expand_snippet(self, Context ctx) except -1:
         cdef:
             wchar_t buf = '\0'
             FileWriter fw = FileWriter.from_handle(self.fh_out, self.encoder)
             str prefix = self.snippet_indent.ptr
             str snippet = self.snippet_start.cstr.ptr
-        (<object> ctx.on_snippet)(ctx, snippet, prefix, fw)
+        try:
+            (<object> ctx.on_snippet)(ctx, snippet, prefix, fw)
+        except Exception as e:
+            reason = "error parsing snippet"
+            raise PytSnippetError(
+                snippet, self.line_num, ctx,
+                reason=reason
+            ) from e
 
         # ensure snippet ends with a newline
         # (so that snippet end line is printed properly)
         if not fw.got_newline:
             file_write(self.fh_out, self.encoder, &NEWLINE, 1)
 
-    cdef PARSE_RES doparse(self, Context ctx) nogil:
+    cdef PARSE_RES doparse(self, Context ctx) nogil except PARSE_EXCEPTION:
         cdef int read_status = READ_OK
-        # setlocale(LC_ALL, "en_GB.utf8")  # TODO: move into parser state
         setlocale(LC_ALL, "UTF-8")
         while True:
             read_status = self.readline()
@@ -605,7 +633,7 @@ cdef class Parser:
     def parse(self, cb: snippet_cb, fname_src: str, fname_dst: t.Optional[str] = None) -> PARSE_RES:
         cdef:
             Context ctx = Context(cb, fname_src, fname_dst)
-            size_t parse_result
+            size_t parse_result = PARSE_EXCEPTION
         self.reset(fname_src, fname_dst)
 
         try:

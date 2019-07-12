@@ -17,6 +17,7 @@ cdef enum:
     PARSE_EXPECTED_SNIPPET_OPEN = 3
     PARSE_EXPECTED_SNIPPET_CLOSE = 4
     PARSE_SNIPPET_NAMES_MISMATCH = 5
+    PARSE_EXCEPTION = 1000
 
 cdef struct cstr:
     size_t buflen
@@ -87,8 +88,8 @@ cdef class Parser:
     cdef int snippet_find(self, snippet* dst) nogil
     cdef int readline(self) nogil
     cdef int writeline(self) nogil
-    cdef void expand_snippet(self, Context ctx)
-    cdef unsigned int doparse(self, Context ctx) nogil
+    cdef int expand_snippet(self, Context ctx) except -1
+    cdef unsigned int doparse(self, Context ctx) nogil except PARSE_EXCEPTION
 
 cdef class Context:
     cdef readonly wchar_t *src
