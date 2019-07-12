@@ -60,7 +60,7 @@ class Directory(s.SpecBase):
     def _conform(cls, value: t.Any):
         path: t.Optional[Path] = cls.__value(value)
         if path and path.exists():
-            return path
+            return path.as_posix()
         return s.Invalid
 
     @staticmethod
