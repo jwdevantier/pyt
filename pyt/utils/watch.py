@@ -38,9 +38,15 @@ class Watcher(Protocol):
 
 class CompileWatcher(AllWatcher):
     def __init__(self, path: str, *, config: Configuration):
-        self.ignore_file = or_pattern(config.parser.ignore_patterns)
+        if config.parser.ignore_patterns:
+            self.ignore_file = or_pattern(config.parser.ignore_patterns)
+        else:
+            self.ignore_file = lambda _: None
         self.include_file = or_pattern(config.parser.include_patterns)
-        self.ignore_dir = or_pattern(config.parser.ignore_dir_patterns)
+        if config.parser.ignore_dir_patterns:
+            self.ignore_dir = or_pattern(config.parser.ignore_dir_patterns)
+        else:
+            self.ignore_dir = lambda _: None
         self.temp_file_suffix = config.parser.temp_file_suffix
         super().__init__(path)
 
