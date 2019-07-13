@@ -3,6 +3,7 @@ from multiprocessing.connection import Connection
 from os import DirEntry
 from pathlib import Path
 import asyncio
+import signal
 import logging
 import typing as t
 from abc import ABC, abstractmethod
@@ -152,8 +153,25 @@ class WatcherConfig:
         return wg.awatch(self.path, loop=loop, **{'watcher_kwargs': self._kwargs, 'watcher_cls': self.cls})
 
 
-def watch_dirs(watchdirs: t.List[WatcherConfig]):
+def make_interruptible_loop():
     loop = asyncio.new_event_loop()
+
+    async def loop_exit():
+        loop = asyncio.get_event_loop()
+        loop.stop()
+
+    def ask_exit():
+        log.info("watch-mode cancelled, exiting...")
+        for task in asyncio.Task.all_tasks():
+            task.cancel()
+        asyncio.ensure_future(loop_exit())
+
+    loop.add_signal_handler(signal.SIGINT, ask_exit)
+    return loop
+
+
+def watch_dirs(watchdirs: t.List[WatcherConfig]):
+    loop = make_interruptible_loop()
 
     async def tagged(tag: str, agen):
         async for elem in agen:
@@ -171,5 +189,7 @@ def watch_dirs(watchdirs: t.List[WatcherConfig]):
                 break
     except KeyboardInterrupt:
         log.debug('KeyboardInterrupt, exiting')
+    except asyncio.CancelledError:
+        log.info("watch-mode exited.")
     finally:
         loop.close()
