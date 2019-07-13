@@ -5,6 +5,10 @@ from pyt.utils import spec as s
 from pyt.utils.error import PytError
 from multiprocessing import cpu_count
 from os.path import expanduser
+import io
+import logging
+
+log = logging.getLogger(__file__)
 
 CONF_NAME = "pyt.conf.yml"
 
@@ -29,6 +33,13 @@ def _nonempty(value):
         return False
 
 
+def pp_log_conf(config: t.Mapping[str, t.Any]):
+    with io.StringIO() as sbuf:
+        yaml.safe_dump(config, sbuf, default_flow_style=False, sort_keys=False)
+        sbuf.flush()
+        log.info("configuration used:\n" + '\n'.join([f"   {line}" for line in sbuf.getvalue().split('\n')]))
+
+
 class Directory(s.SpecBase):
     """
 
@@ -36,6 +47,7 @@ class Directory(s.SpecBase):
     home directory and relative paths are made absolute in relation to the
     current working directory.
     """
+
     @classmethod
     def __value(cls, value: t.Any) -> t.Optional[Path]:
         try:
@@ -182,7 +194,6 @@ def load(project: Path):
     if config_c == s.Invalid:
         # Should never happen here - we already validated the spec
         ConfigurationFileInvalidError(PYT_CONF_SPEC, config)
-    print("CONFIG_C")
-    print(config_c)
 
+    pp_log_conf(config_c)
     return Configuration(project, config_c)
