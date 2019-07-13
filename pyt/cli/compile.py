@@ -6,8 +6,9 @@ import typing as t
 import multiprocessing as mp
 from multiprocessing import Process
 from importlib import import_module
+from time import time
 
-import watchgod
+# import watchgod
 from watchgod.watcher import Change
 import colorama as clr
 
@@ -16,7 +17,8 @@ import pyt.parser as pparse
 from pyt.utils.decorators import Debounce
 from pyt.protocols import IWriter
 from pyt.utils.fhash import file_hash
-from pyt.utils.watch import Watcher, CompileWatcher, MPScheduler
+
+from pyt.utils.watch import Watcher, SearchPathsWatcher, CompileWatcher, MPScheduler, watch_dirs, WatcherConfig
 from pyt.cli.conf import Configuration, ConfParser
 
 log = logging.getLogger(__name__)
@@ -25,11 +27,11 @@ CompileFn = t.Callable[[], None]
 Changeset = t.Set[t.Tuple[Change, str]]
 
 
-def dirwalker(w: Watcher, path: str) -> t.Iterator[os.DirEntry]:
+def compiler_input_files(w: Watcher, path: str) -> t.Iterator[os.DirEntry]:
     for entry in os.scandir(path):
         if entry.is_dir():
             if w.should_watch_dir(entry):
-                yield from dirwalker(w, entry.path)
+                yield from compiler_input_files(w, entry.path)
         elif w.should_watch_file(entry):
             yield entry
 
@@ -212,7 +214,6 @@ class MPCompiler(MPScheduler):
         sys.path.extend(self.parser_conf.search_paths)
         fpath: str = jobs.recv()
         while fpath != "<stop>":
-            log.info(f"received fpath '{fpath}' (type: {type(fpath)})")
             try:
                 out = parser.parse(expand_snippet, fpath)
                 if out:
@@ -230,7 +231,7 @@ def do_compile_singlecore(parser_conf: ConfParser, walker: CompileWatcher,
         temp_file_suffix=parser_conf.temp_file_suffix,
         should_replace_file=should_replace)
     sys.path.extend(parser_conf.search_paths)
-    for entry in dirwalker(walker, walker.root_path):
+    for entry in compiler_input_files(walker, walker.root_path):
         try:
             out = parser.parse(expand_snippet, entry.path)
             if out != 0:
@@ -266,9 +267,11 @@ def compile(config: Configuration, watch: bool) -> None:
 
         def compile_sc():
             nonlocal config, walker
+            t_start = time()
             p = Process(target=do_compile_singlecore, args=(config.parser, walker, should_replace))
             p.start()
             p.join()
+            log.info("compile finished in {0:.2f}s".format(time()-t_start))
 
         compilefn = compile_sc
     else:
@@ -277,22 +280,29 @@ def compile(config: Configuration, watch: bool) -> None:
 
         def compile_mp():
             nonlocal walker, sched
+            t_start = time()
             with sched as s:
-                s.submit((entry.path for entry in dirwalker(walker, root_path)))
+                s.submit((entry.path for entry in compiler_input_files(walker, root_path)))
+            log.info("compile finished in {0:.2f}s".format(time() - t_start))
 
         compilefn = compile_mp
 
     compilefn()
     if not watch:
         sys.exit(0)
+    else:
+        # Should be unnecessary, only to appease MyPy
+        fdb = fdb or FileChecksums()
 
     compile = Debounce(compilefn)
-    for changes in watchgod.watch(
-            config.project.absolute().as_posix(),
-            watcher_cls=CompileWatcher,
-            watcher_kwargs={'config': config}):
-        real_changes = list(fdb.sync(changes))
-        if real_changes:
-            print("REAL CHANGES")
-            print(real_changes)
+    dirs_to_watch = [WatcherConfig('search_path', path, SearchPathsWatcher) for path in config.parser.search_paths]
+    dirs_to_watch.append(
+        WatcherConfig('project', config.project.absolute().as_posix(), CompileWatcher, {'config': config}))
+
+    for tag, changes in watch_dirs(dirs_to_watch):
+        if tag == 'search_path':
             compile.schedule()
+        else:
+            real_changes = list(fdb.sync(changes))
+            if real_changes:
+                compile.schedule()
