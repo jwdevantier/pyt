@@ -20,11 +20,8 @@ class Debounce:
         self.timer: t.Optional[Timer] = None
         self.elapsed: int = 0
 
-        self.time_start: float = time()  # TODO: remove
-
     def __call__(self, *args, **kwargs):
         start: float = time()
-        print(f"COMPILING '{ceil(time() - self.time_start)}'")  # TODO: remove
         result = self.fn(*args, **kwargs)
         self.elapsed = ceil(time() - start)
         return result
