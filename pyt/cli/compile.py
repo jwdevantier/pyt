@@ -8,7 +8,6 @@ from multiprocessing import Process
 from importlib import import_module
 from time import time
 
-# import watchgod
 from watchgod.watcher import Change
 import colorama as clr
 
