@@ -127,10 +127,13 @@ class MPScheduler(ABC):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._kill_procs()
 
-    def submit(self, work: t.Iterable[t.Any]):
+    def submit(self, work: t.Iterable[t.Any]) -> int:
         pipes = itools.cycle(self._pipe_snd)
+        jobs = 0
         for item in work:
             next(pipes).send(item)
+            jobs += 1
+        return jobs
 
 
 async def iter_all(*aiters: t.AsyncIterator):

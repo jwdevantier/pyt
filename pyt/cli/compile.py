@@ -231,14 +231,17 @@ def do_compile_singlecore(parser_conf: ConfParser, walker: CompileWatcher,
         temp_file_suffix=parser_conf.temp_file_suffix,
         should_replace_file=should_replace)
     sys.path.extend(parser_conf.search_paths)
+    num_files_parsed = 0
     for entry in compiler_input_files(walker, walker.root_path):
         try:
             out = parser.parse(expand_snippet, entry.path)
+            num_files_parsed += 1
             if out != 0:
                 log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
                 log.error(f"in: {entry.path}")
         except PytSnippetError as e:
             print_snippet_error(e)
+    log.info(f"parsed {num_files_parsed} files during compile pass")
 
 
 def should_always_replace(tmp: str, orig: str):
@@ -282,8 +285,8 @@ def compile(config: Configuration, watch: bool) -> None:
             nonlocal walker, sched
             t_start = time()
             with sched as s:
-                s.submit((entry.path for entry in compiler_input_files(walker, root_path)))
-            log.info("compile finished in {0:.2f}s".format(time() - t_start))
+                njobs = s.submit((entry.path for entry in compiler_input_files(walker, root_path)))
+            log.info("compile pass: {0} jobs in {1:.2f}s".format(njobs, time() - t_start))
 
         compilefn = compile_mp
 
