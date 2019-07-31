@@ -280,37 +280,6 @@ def dsl_eval_if(ctx: EvalContext, tokens: TokenIterator, scope: Scope, cond_expr
             break
 
 
-#
-# def dsl_eval_if(ctx: EvalContext, tokens: TokenIterator, scope: Scope, cond_expr: str):
-#     accepted_tags = {'elif', 'else', '/if'}
-#     kw = 'if'
-#     while True:
-#         stop = stop_at_ctrl_tokens(accepted_tags)
-#         if kw == '/if':
-#             raise RuntimeError("..")
-#         if kw != 'else':
-#             if _eval_exprs(cond_expr, scope):
-#                 dsl_eval_main(ctx, tokens, Scope(outer=scope), stop)
-#                 skip_tokens(tokens, stop_at_ctrl_tokens({'/if'}))
-#                 break
-#             else:
-#                 skip_tokens(tokens, stop)
-#         else:
-#             dsl_eval_main(ctx, tokens, Scope(outer=scope), stop)
-#             break
-#
-#         # TODO: revamp once we've settled on a data structure for Tokens
-#         token = tokens.current
-#         if not token or token[0] != TokType.CTRL or token[1] not in accepted_tags:
-#             raise RuntimeError(f"invalid nesting - expected {accepted_tags}")
-#
-#         _, kw, if_args = token
-#         if kw == 'else':
-#             accepted_tags = {'/if'}
-#         elif kw == '/if':
-#             break
-
-
 def dsl_eval_component(ctx: EvalContext, tokens: TokenIterator, scope: Scope, component_args: str):
     _, component, args = ctx.tokens.current
     # TODO: implement
