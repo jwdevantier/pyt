@@ -161,10 +161,11 @@ class TokenIterator:
 
 
 class EvalContext:
-    __slots__ = ['handlers', 'buffer', 'buffer_append', 'out']
+    __slots__ = ['blocks', 'components', 'buffer', 'buffer_append', 'out']
 
-    def __init__(self, handlers: t.Dict[str, t.Callable]):
-        self.handlers = handlers
+    def __init__(self, *, blocks: Handlers = None, components: Components = None):
+        self.blocks = blocks or {}
+        self.components = components or {}
         self.buffer = []
         self.buffer_append: t.Callable[[object], None] = self.buffer.append
         self.out = CodeBlock()
@@ -201,16 +202,20 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
                 dsl_eval_if(ctx, tokens, scope, ctrl_args)
             elif ctrl_kw[0].isupper():
                 # TODO: implement actual component rendering
-                handler = ctx.handlers.get(ctrl_kw)
-                if handler:
-                    handler(ctx, tokens, scope, ctrl_args)
+                try:
+                    ctx.components[ctrl_kw](ctx, tokens, scope, ctrl_args)
                     return
-                raise RuntimeError(f"Unknown component '{ctrl_kw}'")
+                except KeyError:
+                    raise RuntimeError(f"Unknown component '{ctrl_kw}'")
             elif ctrl_kw.startswith('/'):
                 raise RuntimeError(
                     f"illegal nesting, got unexpected'{ctrl_kw}'")
             else:
-                raise RuntimeError(f"unknown instruction '{ctrl_kw}'")
+                try:
+                    ctx.blocks[ctrl_kw](ctx, tokens, scope, ctrl_args)
+                except KeyError:
+                    raise RuntimeError(f"Unknown block '{ctrl_kw}'")
+                raise RuntimeError(f"unknown block '{ctrl_kw}'")
 
 
 def dsl_eval_for(ctx: EvalContext, tokens: TokenIterator, scope: Scope, for_args: str):
