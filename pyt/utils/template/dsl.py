@@ -161,7 +161,7 @@ class TokenIterator:
 
 
 class EvalContext:
-    __slots__ = ['tokens', 'handlers', 'buffer', 'buffer_append', 'out']
+    __slots__ = ['handlers', 'buffer', 'buffer_append', 'out']
 
     def __init__(self, handlers: t.Dict[str, t.Callable]):
         self.handlers = handlers
