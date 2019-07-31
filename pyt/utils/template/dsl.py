@@ -203,7 +203,9 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
                 # TODO: implement actual component rendering
                 handler = ctx.handlers.get(ctrl_kw)
                 if handler:
-                    return handler(...)
+                    handler(ctx, tokens, scope, ctrl_args)
+                    return
+                raise RuntimeError(f"Unknown component '{ctrl_kw}'")
             elif ctrl_kw.startswith('/'):
                 raise RuntimeError(
                     f"illegal nesting, got unexpected'{ctrl_kw}'")
