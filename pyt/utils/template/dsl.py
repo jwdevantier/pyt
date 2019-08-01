@@ -178,14 +178,26 @@ class EvalContext:
     def writeln(self, line: str) -> None:
         self.out.writeln(line)
 
-    def new(self) -> 'EvalContext':
+    def derived(self,
+                with_blocks: t.Optional[Blocks] = None,
+                with_components: t.Optional[Components] = None) -> 'EvalContext':
         """Make new EvalContext sharing the same blocks and handlers as this one.
 
         Returns
         -------
             A new EvalContext instance
         """
-        return EvalContext(blocks=self.blocks, components=self.components)
+
+        if with_blocks:
+            blocks = {
+                **{k: v for k, v in self.blocks.items() if k != 'body'},
+                **with_blocks
+            }
+        else:
+            blocks = {k: v for k, v in self.blocks.items() if k != 'body'}
+        return EvalContext(
+            blocks=blocks,
+            components={**self.components, **(with_components or {})})
 
 
 # one method for prepping props
@@ -216,7 +228,7 @@ class Component:
         # Evaluate 'body' the DSL contained inside the component block
         # => solves the issue of the surrounding component DSL scope
         #    polluting the scope for the body supplied the component
-        body_ctx = ctx.new()
+        body_ctx = ctx.derived()
         dsl_eval_main(
             body_ctx, tokens, Scope(outer=scope),
             stop_at_ctrl_tokens({f'/{component_name}'}))
@@ -224,21 +236,19 @@ class Component:
         # Define scope supplied to the rendering
         component_scope = Scope(outer=scope)
         cls._scope_(component_scope, component_args)
-        scope['body'] = body_ctx.out
 
+        # TODO: lazily render children
+        def render_body(ctx: EvalContext, _: TokenIterator, __: Scope, args: str):
+            if args:
+                raise RuntimeError("body block cannot take arguments")
+            ctx.out.add_section(body_ctx.out)
+
+        component_ctx = ctx.derived(with_blocks={'body': render_body})
         # Render the component itself
-        # TODO: this way, props trickle down to subcomponents etc, OK ?
-        # def render_body(ctx: EvalContext, tokens: TokenIterator, scope: Scope, args: str):
-        #     print("BODY BLOCK CALLED")
-        #     pass
-        # component_ctx = EvalContext(blocks={**ctx.blocks, 'body': render_body}, components=ctx.components)
-        # dsl_eval_main(component_ctx, TokenIterator(token_stream(
-        #     deindent_str_block(cls.TEMPLATE, ltrim=True))),
-        #               component_scope)
-        # ctx.out.add_section(component_ctx.out)
-        dsl_eval_main(ctx, TokenIterator(token_stream(
+        dsl_eval_main(component_ctx, TokenIterator(token_stream(
             deindent_str_block(cls.TEMPLATE, ltrim=True))),
                       component_scope)
+        ctx.out.add_section(component_ctx.out)
 
 
 def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t.Optional[t.Callable] = None):
@@ -278,20 +288,19 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
                 dsl_eval_if(ctx, tokens, scope, ctrl_args)
             elif ctrl_kw[0].isupper():
                 # TODO - FIXME - will swallow keyerrors from user-code
-                try:
-                    ctx.components[ctrl_kw]._render_(ctx, tokens, scope, ctrl_kw, ctrl_args)
-                    return
-                except KeyError:
+                component = ctx.components.get(ctrl_kw)
+                if not component:
                     raise RuntimeError(f"Unknown component '{ctrl_kw}'")
-            elif ctrl_kw.startswith('/'):
+
+                component._render_(ctx, tokens, scope, ctrl_kw, ctrl_args)
+            elif not ctrl_kw.startswith('/'):  # must be a block
+                block = ctx.blocks.get(ctrl_kw)
+                if not block:
+                    raise RuntimeError(f"Unknown block '{ctrl_kw}'")
+                block(ctx, tokens, scope, ctrl_args)
+            else:  # must be a close block tag - should not been seen
                 raise RuntimeError(
                     f"illegal nesting, got unexpected'{ctrl_kw}'")
-            else:
-                try:
-                    ctx.blocks[ctrl_kw](ctx, tokens, scope, ctrl_args)
-                except KeyError:
-                    raise RuntimeError(f"Unknown block '{ctrl_kw}'")
-                raise RuntimeError(f"unknown block '{ctrl_kw}'")
 
 
 def dsl_eval_for(ctx: EvalContext, tokens: TokenIterator, scope: Scope, for_args: str):
