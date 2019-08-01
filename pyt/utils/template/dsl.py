@@ -7,6 +7,11 @@ from enum import Enum, unique as enum_unique_values
 from re import compile as re_compile
 
 from pyt.utils.template.scope import Scope
+from pyt.utils.text import deindent_str_block
+
+Element = t.Union[str,]
+Blocks = t.Dict[str, t.Callable[['EvalContext', 'TokenIterator', Scope], None]]
+Components = t.Dict[str, t.Type['Component']]
 
 
 # Do not go templite (compiled) approach, instead write an interpreted approach
@@ -15,14 +20,14 @@ from pyt.utils.template.scope import Scope
 # `iter_until` is important for recursively eval'ing components and passing along
 # whatever embedded DSL text intended for them (their props.children)
 
+# TODO: consider removing CodeBlock usage - seems like I can write directly ?
+#       ... or will that screw up indentation stuff ?
+
+
 @enum_unique_values
 class Indentation(Enum):
     INDENT = 1
     DEDENT = 2
-
-
-Element = t.Union[str,]
-Props = t.Dict[str, t.Any]  # TODO: re-shape when defined
 
 
 class IRender(Protocol):
@@ -163,7 +168,7 @@ class TokenIterator:
 class EvalContext:
     __slots__ = ['blocks', 'components', 'buffer', 'buffer_append', 'out']
 
-    def __init__(self, *, blocks: Handlers = None, components: Components = None):
+    def __init__(self, *, blocks: Blocks = None, components: Components = None):
         self.blocks = blocks or {}
         self.components = components or {}
         self.buffer = []
@@ -172,6 +177,68 @@ class EvalContext:
 
     def writeln(self, line: str) -> None:
         self.out.writeln(line)
+
+    def new(self) -> 'EvalContext':
+        """Make new EvalContext sharing the same blocks and handlers as this one.
+
+        Returns
+        -------
+            A new EvalContext instance
+        """
+        return EvalContext(blocks=self.blocks, components=self.components)
+
+
+# one method for prepping props
+# optional hooks for specs
+# TODO: do I *HAVE* to rely on people implementing _scope_ ?
+class Component:
+    TEMPLATE = ""
+
+    @classmethod
+    def _scope_(cls, scope: Scope, component_args: str) -> None:
+        """
+
+        Parameters
+        ----------
+        component_args
+            any arguments given after the component name - parsing this string
+            is up to the component.
+
+        Returns
+        -------
+            A new scope
+        """
+        pass
+
+    @classmethod
+    def _render_(cls, ctx: EvalContext, tokens: TokenIterator, scope: Scope,
+                 component_name: str, component_args: str):
+        # Evaluate 'body' the DSL contained inside the component block
+        # => solves the issue of the surrounding component DSL scope
+        #    polluting the scope for the body supplied the component
+        body_ctx = ctx.new()
+        dsl_eval_main(
+            body_ctx, tokens, Scope(outer=scope),
+            stop_at_ctrl_tokens({f'/{component_name}'}))
+
+        # Define scope supplied to the rendering
+        component_scope = Scope(outer=scope)
+        cls._scope_(component_scope, component_args)
+        scope['body'] = body_ctx.out
+
+        # Render the component itself
+        # TODO: this way, props trickle down to subcomponents etc, OK ?
+        # def render_body(ctx: EvalContext, tokens: TokenIterator, scope: Scope, args: str):
+        #     print("BODY BLOCK CALLED")
+        #     pass
+        # component_ctx = EvalContext(blocks={**ctx.blocks, 'body': render_body}, components=ctx.components)
+        # dsl_eval_main(component_ctx, TokenIterator(token_stream(
+        #     deindent_str_block(cls.TEMPLATE, ltrim=True))),
+        #               component_scope)
+        # ctx.out.add_section(component_ctx.out)
+        dsl_eval_main(ctx, TokenIterator(token_stream(
+            deindent_str_block(cls.TEMPLATE, ltrim=True))),
+                      component_scope)
 
 
 def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t.Optional[t.Callable] = None):
@@ -190,7 +257,14 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
             else:
                 ctx.writeln("")
         elif typ == TokType.EXPR:
-            ctx.buffer_append(to_str(_eval_exprs(vals[0], scope)))
+            result = _eval_exprs(vals[0], scope)
+            # if isinstance(result, CodeBlock):
+            #     # TODO: somehow make a 'body' block (w/o closing tag)
+            #     print(f"!! @ indent '{''.join(ctx.buffer)}'")
+            #     # result._render_(ctx, tokens, scope, 'body', '')
+            # else:
+            #     ctx.buffer_append(to_str(result))
+            ctx.buffer_append(to_str(result))
         elif typ == TokType.CTRL:
             if len(ctx.buffer) != 0:
                 # flush buffer
@@ -203,9 +277,9 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
             elif ctrl_kw == 'if':
                 dsl_eval_if(ctx, tokens, scope, ctrl_args)
             elif ctrl_kw[0].isupper():
-                # TODO: implement actual component rendering
+                # TODO - FIXME - will swallow keyerrors from user-code
                 try:
-                    ctx.components[ctrl_kw](ctx, tokens, scope, ctrl_args)
+                    ctx.components[ctrl_kw]._render_(ctx, tokens, scope, ctrl_kw, ctrl_args)
                     return
                 except KeyError:
                     raise RuntimeError(f"Unknown component '{ctrl_kw}'")
