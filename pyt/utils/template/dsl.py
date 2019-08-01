@@ -187,6 +187,8 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
                 # flush buffer
                 ctx.writeln("".join(ctx.buffer))
                 del ctx.buffer[:]
+            else:
+                ctx.writeln("")
         elif typ == TokType.EXPR:
             ctx.buffer_append(to_str(_eval_exprs(vals[0], scope)))
         elif typ == TokType.CTRL:
