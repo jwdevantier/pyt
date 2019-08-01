@@ -17,9 +17,6 @@ Components = t.Dict[str, t.Type['Component']]
 # Do not go templite (compiled) approach, instead write an interpreted approach
 # (Django style, norvig lispy style)
 
-# `iter_until` is important for recursively eval'ing components and passing along
-# whatever embedded DSL text intended for them (their props.children)
-
 # TODO: consider removing CodeBlock usage - seems like I can write directly ?
 #       ... or will that screw up indentation stuff ?
 
@@ -28,11 +25,6 @@ Components = t.Dict[str, t.Type['Component']]
 class Indentation(Enum):
     INDENT = 1
     DEDENT = 2
-
-
-class IRender(Protocol):
-    def render(self, buf: t.Union[IWriter, StringIO], indent_with: str = ' ', indent_level: int = 0):
-        ...
 
 
 class CodeBlock:
@@ -268,12 +260,6 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
                 ctx.writeln("")
         elif typ == TokType.EXPR:
             result = _eval_exprs(vals[0], scope)
-            # if isinstance(result, CodeBlock):
-            #     # TODO: somehow make a 'body' block (w/o closing tag)
-            #     print(f"!! @ indent '{''.join(ctx.buffer)}'")
-            #     # result._render_(ctx, tokens, scope, 'body', '')
-            # else:
-            #     ctx.buffer_append(to_str(result))
             ctx.buffer_append(to_str(result))
         elif typ == TokType.CTRL:
             if len(ctx.buffer) != 0:
