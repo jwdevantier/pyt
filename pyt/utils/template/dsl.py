@@ -1,24 +1,21 @@
-from typing_extensions import Protocol
 import typing as t
 from io import StringIO
-from pyt.protocols import IWriter
-
 from enum import Enum, unique as enum_unique_values
 from re import compile as re_compile
 
+from pyt.utils.template.tokens import *
 from pyt.utils.template.scope import Scope
 from pyt.utils.text import deindent_str_block
+from pyt.protocols import IWriter
+
 
 Element = t.Union[str,]
 Blocks = t.Dict[str, t.Callable[['EvalContext', 'TokenIterator', Scope], None]]
 Components = t.Dict[str, t.Type['Component']]
 
-
+# TODO: issue - %% lines aren't rewritten
 # Do not go templite (compiled) approach, instead write an interpreted approach
 # (Django style, norvig lispy style)
-
-# TODO: consider removing CodeBlock usage - seems like I can write directly ?
-#       ... or will that screw up indentation stuff ?
 
 
 @enum_unique_values
@@ -27,62 +24,27 @@ class Indentation(Enum):
     DEDENT = 2
 
 
-class CodeBlock:
-    def __init__(self):
-        self._code: t.List[t.Union[Element, Indentation, 'CodeBlock']] = []
+class LineWriter:
+    def __init__(self, writer: IWriter):
+        self.indents = []
+        self._indent = ""
+        self.writer = writer
 
-    def writeln(self, s: Element):
-        self._code.append(s)
+    def indent(self, indent_by: str):
+        self.indents.append(indent_by)
+        self._indent += indent_by
 
-    def writeln_r(self, s: Element):
-        self._code.extend([s, Indentation.INDENT])
+    def dedent(self):
+        self.indents.pop()
+        self._indent = "".join(self.indents)
 
-    def writeln_l(self, s: Element):
-        self._code.extend([s, Indentation.DEDENT])
-
-    def writeln_lr(self, s: Element):
-        self._code.extend([Indentation.DEDENT, s, Indentation.INDENT])
-
-    def render(self, buf: t.Union[IWriter, StringIO], indent_with: str = ' ', indent_level: int = 0):
-        for elem in self._code:
-            if isinstance(elem, str):
-                buf.write(f"{indent_with * indent_level}{elem}\n")
-            elif isinstance(elem, Indentation):
-                if elem is Indentation.INDENT:
-                    indent_level += 1
-                else:
-                    indent_level -= 1
-                    assert indent_level >= 0, "indentation level cannot be negative"
-            elif hasattr(elem, 'render') and callable(elem.render):
-                elem.render(buf, indent_with=indent_with, indent_level=indent_level)
-            else:
-                raise RuntimeError(f"CodeBlock unexpected '{type(elem).__name__}' element in sequence")
-
-        return self._code[1:]  # FIRST ELEM IS A SPURIOUS NEWLINE
-
-    def add_section(self, block: 'CodeBlock'):
-        self._code.append(block)  # append, no newline needed, other options ensure those
-
-    def __repr__(self):
-        return (
-            f"{type(self).__name__}<"
-            f"code: [{', '.join((repr(elem) for elem in self._code))}]"
-            ">")
+    def writeln(self, s: str) -> None:
+        self.writer.write(f"{self._indent}{s}\n")
 
 
 _tstr = re_compile(r"(<<.*?>>)")
-_cline = re_compile(r"^\s*%\s*(?P<kw>[^%[^\s]+)\s*(?P<rest>[^%].+)?")
+_cline = re_compile(r"^(?P<prefix>\s*)%\s*(?P<kw>[^%[^\s]+)\s*(?P<rest>[^%].+)?")
 
-
-@enum_unique_values
-class TokType(Enum):
-    TEXT = 1
-    NEWLINE = 2
-    CTRL = 3
-    EXPR = 4
-
-
-# TODO: issue - %% lines aren't rewritten
 
 def token_stream(text: str):
     # rewritten to have a 'lead-in' phase where leading newlines is ignored.
@@ -91,17 +53,17 @@ def token_stream(text: str):
     for line in lines:
         m = _cline.match(line)
         if m:
-            yield (TokType.CTRL, m['kw'], m['rest'])
+            yield CtrlToken(m['prefix'], m['kw'], m['rest'])
         else:
             for tok in _tstr.split(line):
                 if tok.startswith('<<'):
-                    yield (TokType.EXPR, tok[2:-2])
+                    yield ExprToken(tok[2:-2])
                     lead_in = False
                 elif tok is not '':
-                    yield (TokType.TEXT, tok)
+                    yield TextToken(tok)
                     lead_in = False
             if not lead_in:
-                yield (TokType.NEWLINE,)
+                yield NewlineToken()
         if not lead_in:
             break
 
@@ -109,16 +71,16 @@ def token_stream(text: str):
     for line in lines:
         m = _cline.match(line)
         if m:
-            yield (TokType.CTRL, m['kw'], m['rest'])
+            yield CtrlToken(m['prefix'], m['kw'], m['rest'])
         else:
             for tok in _tstr.split(line):
                 if tok.startswith('<<'):
-                    yield (TokType.EXPR, tok[2:-2])
+                    yield ExprToken(tok[2:-2])
                 elif tok != '':
-                    yield (TokType.TEXT, tok)
+                    yield TextToken(tok)
                 else:
                     continue
-            yield (TokType.NEWLINE,)
+            yield NewlineToken()
 
 
 def _eval_exprs(expr: str, scope: Scope):
@@ -158,17 +120,14 @@ class TokenIterator:
 
 
 class EvalContext:
-    __slots__ = ['blocks', 'components', 'buffer', 'buffer_append', 'out']
+    __slots__ = ['blocks', 'components', 'buffer', 'buffer_append', 'writer']
 
-    def __init__(self, *, blocks: Blocks = None, components: Components = None):
+    def __init__(self, writer: LineWriter, *, blocks: Blocks = None, components: Components = None):
         self.blocks = blocks or {}
         self.components = components or {}
         self.buffer = []
         self.buffer_append: t.Callable[[object], None] = self.buffer.append
-        self.out = CodeBlock()
-
-    def writeln(self, line: str) -> None:
-        self.out.writeln(line)
+        self.writer = writer
 
     def derived(self,
                 with_blocks: t.Optional[Blocks] = None,
@@ -188,6 +147,7 @@ class EvalContext:
         else:
             blocks = {k: v for k, v in self.blocks.items() if k != 'body'}
         return EvalContext(
+            self.writer,
             blocks=blocks,
             components={**self.components, **(with_components or {})})
 
@@ -221,78 +181,85 @@ class Component:
         # => solves the issue of the surrounding component DSL scope
         #    polluting the scope for the body supplied the component
         body_ctx = ctx.derived()
-        dsl_eval_main(
-            body_ctx, tokens, Scope(outer=scope),
-            stop_at_ctrl_tokens({f'/{component_name}'}))
+        body_rendered = False
 
         # Define scope supplied to the rendering
         component_scope = Scope(outer=scope)
         cls._scope_(component_scope, component_args)
 
         # TODO: lazily render children
-        def render_body(ctx: EvalContext, _: TokenIterator, __: Scope, args: str):
+        def render_body(_: EvalContext, __: TokenIterator, ___: Scope, args: str):
+            nonlocal body_rendered
             if args:
                 raise RuntimeError("body block cannot take arguments")
-            ctx.out.add_section(body_ctx.out)
+
+            if not body_rendered:
+                dsl_eval_main(
+                    body_ctx, tokens, Scope(outer=scope),
+                    stop_at_ctrl_tokens({f'/{component_name}'}))
+                body_rendered = True
 
         component_ctx = ctx.derived(with_blocks={'body': render_body})
         # Render the component itself
         dsl_eval_main(component_ctx, TokenIterator(token_stream(
             deindent_str_block(cls.TEMPLATE, ltrim=True))),
                       component_scope)
-        ctx.out.add_section(component_ctx.out)
 
 
 def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t.Optional[t.Callable] = None):
     to_str = str
     for token in tokens:
         if stop and stop(token):
+            if isinstance(token, CtrlToken) and token.keyword.startswith('/'):
+                ctx.writer.dedent()
             return
-        typ, *vals = token
-        if typ == TokType.TEXT:
-            ctx.buffer_append(vals[0])
-        elif typ == TokType.NEWLINE:
+        # typ, *vals = token
+        # if typ == TokType.TEXT:
+        typ = type(token)
+        if typ == TextToken:
+            ctx.buffer_append(token.text)
+        elif typ == NewlineToken:
             if len(ctx.buffer) != 0:
                 # flush buffer
-                ctx.writeln("".join(ctx.buffer))
+                ctx.writer.writeln("".join(ctx.buffer))
                 del ctx.buffer[:]
             else:
-                ctx.writeln("")
-        elif typ == TokType.EXPR:
-            result = _eval_exprs(vals[0], scope)
+                ctx.writer.writeln("")
+        elif typ == ExprToken:
+            result = _eval_exprs(token.expr, scope)
             ctx.buffer_append(to_str(result))
-        elif typ == TokType.CTRL:
+        elif typ == CtrlToken:
             if len(ctx.buffer) != 0:
                 # flush buffer
-                ctx.writeln("".join(ctx.buffer))
+                ctx.writer.writeln("".join(ctx.buffer))
                 del ctx.buffer[:]
 
-            ctrl_kw, ctrl_args = vals
-            if ctrl_kw == 'for':
-                dsl_eval_for(ctx, tokens, scope, ctrl_args)
-            elif ctrl_kw == 'if':
-                dsl_eval_if(ctx, tokens, scope, ctrl_args)
-            elif ctrl_kw[0].isupper():
-                # TODO - FIXME - will swallow keyerrors from user-code
-                component = ctx.components.get(ctrl_kw)
+            ctx.writer.indent(token.prefix)
+            if token.keyword == 'for':
+                dsl_eval_for(ctx, tokens, scope, token.args)
+            elif token.keyword == 'if':
+                dsl_eval_if(ctx, tokens, scope, token.args)
+            elif token.keyword[0].isupper():
+                component = ctx.components.get(token.keyword)
                 if not component:
-                    raise RuntimeError(f"Unknown component '{ctrl_kw}'")
+                    raise RuntimeError(f"Unknown component '{token.keyword}'")
 
-                component._render_(ctx, tokens, scope, ctrl_kw, ctrl_args)
-            elif not ctrl_kw.startswith('/'):  # must be a block
-                block = ctx.blocks.get(ctrl_kw)
+                component._render_(ctx, tokens, scope, token.keyword, token.args)
+            elif not token.keyword.startswith('/'):  # must be a block
+                # TODO: indent here
+                block = ctx.blocks.get(token.keyword)
                 if not block:
-                    raise RuntimeError(f"Unknown block '{ctrl_kw}'")
-                block(ctx, tokens, scope, ctrl_args)
+                    raise RuntimeError(f"Unknown block '{token.keyword}'")
+                block(ctx, tokens, scope, token.args)
             else:  # must be a close block tag - should not been seen
                 raise RuntimeError(
-                    f"illegal nesting, got unexpected'{ctrl_kw}'")
+                    f"illegal nesting, got unexpected'{token.keyword}'")
 
 
 def dsl_eval_for(ctx: EvalContext, tokens: TokenIterator, scope: Scope, for_args: str):
     for_tokens = []
     for token in tokens:
-        if token[0] == TokType.CTRL and token[1].startswith('/for'):
+        if isinstance(token, CtrlToken) and token.keyword.startswith('/for'):
             break
         for_tokens.append(token)
     for loop_bindings in gen_loop_iterator(for_args, scope):
@@ -307,7 +274,7 @@ def skip_tokens(tokens: TokenIterator, stop):
 
 def stop_at_ctrl_tokens(tokens: t.Set[str]):
     def stopfn(token):
-        return token[0] == TokType.CTRL and token[1].split()[0] in tokens
+        return isinstance(token, CtrlToken) and token.keyword in tokens
 
     return stopfn
 
@@ -320,9 +287,8 @@ def dsl_eval_if(ctx: EvalContext, tokens: TokenIterator, scope: Scope, cond_expr
             if _eval_exprs(cond_expr, scope):
                 dsl_eval_main(ctx, tokens, Scope(outer=scope), stop_at_ctrl_tokens(accepted_tags))
 
-                # TODO: refactor once a fixed structure for Tokens has been established
                 # skip past all other branches in if-block
-                if tokens.current[1] != '/if':
+                if not isinstance(tokens.current, CtrlToken) or tokens.current.keyword != '/if':
                     skip_tokens(tokens, stop_at_ctrl_tokens({'/if'}))
             else:
                 # skip branch
@@ -337,24 +303,19 @@ def dsl_eval_if(ctx: EvalContext, tokens: TokenIterator, scope: Scope, cond_expr
 
         # TODO: revamp once we've settled on a data structure for Tokens
         token = tokens.current
-        if not token or token[0] != TokType.CTRL or token[1] not in accepted_tags:
+        if not token or not isinstance(token, CtrlToken) or token.keyword not in accepted_tags:
             print(f"TOKEN current: {tokens.current}")
             print(f"TOKEN next: {tokens._next}")
             for token in tokens:
                 print(f"TOK: {token}")
             raise RuntimeError(f"invalid nesting - expected {accepted_tags}, got: {token}")
 
-        _, kw, cond_expr = token
+        kw = token.keyword
+        cond_expr = token.args
         if kw == 'else':
             accepted_tags = {'/if'}
         elif kw == '/if':
             break
-
-
-def dsl_eval_component(ctx: EvalContext, tokens: TokenIterator, scope: Scope, component_args: str):
-    _, component, args = ctx.tokens.current
-    # TODO: implement
-    pass
 
 
 def gen_loop_iterator(for_src, env: t.Mapping):

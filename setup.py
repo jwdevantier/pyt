@@ -56,6 +56,7 @@ setup(
             "pyt/parser/wcsenc.c"]),
         Extension("pyt.utils.spec.spec", ["pyt/utils/spec/spec.pyx"]),
         Extension("pyt.utils.fhash.fhash", ["pyt/utils/fhash/fhash.pyx"]),
+        Extension("pyt.utils.template.tokens", ["pyt/utils/template/tokens.pyx"])
     ], annotate=True)
 
 )

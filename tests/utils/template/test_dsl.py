@@ -5,15 +5,15 @@ from io import StringIO
 # Do **NOT** process text snippets, let the user defining the snippet do so
 # (possibly even the component code)
 
-# TODO write simpler programs to test against
-# TODO definitely need to figure out how to wrap up snippet in a component
-# TODO implement component "props"/formatter methods
-
 # TODO - if, nested (?)
-# TODO - for, simple
-# TODO - if, for (nested)
 # TODO - component lookup -- success
 # TODO - component lookup -- failure
+
+# TODO: dialect idea? github.com/blambeau/wlang
+
+# TODO: <ERROR> codeblock not rendered in template
+#       - take indentation level from parent (+1 ever ?)
+# TODO: <FEATURE> the whitespace thing -- SEE TODO.md
 
 
 TEXT_PROG_LITERAL = """
@@ -30,6 +30,11 @@ TEXT_PROG_EXPR_ADVANCED = """
 TEXT_PROG_COMMENT = """
 something which will be escaped:
 %% for x in lst"""
+
+TEXT_PROG_IF_SIMPLEST = """
+%if x is not None
+x is something
+%/if"""
 
 TEXT_PROG_IF_SIMPLE = """
 always intro
@@ -64,22 +69,41 @@ x is a big positive number
 outro"""
 
 TEXT_PROG_FOR_SIMPLE = """
-% for number in range(0,loops)
+% for number in range(0, loops)
 hello!
-% /for
-"""
+% /for"""
 
 TEXT_PROG_FOR_LOOPVAR = """
-% for number in range(1,loops+1)
+% for number in range(1, loops+1)
 <<number>>!
-% /for
-"""
+% /for"""
 
 TEXT_PROG_FOR_LOOPVARS = """
 % for key,val in entries.items()
 '<<key>>' => '<<val>>'
 % /for"""
 
+TEXT_PROG_FOR_IF_ELSE = """
+% for num in range(0,end)
+% if num % 2 == 0
+<<num>> is even
+% else
+<<num>> is odd
+% /if
+% /for"""
+
+# TODO: fixup
+TEXT_PROG_IF_FOR_ELSE = """
+%if num < 5
+%for n in range(0,num)
+<<n>>...
+%/for
+DONE!
+%else
+<<num>> is a big number
+%/if"""
+
+# TODO: use or discard
 TEXT_PROG_FULL = """
     % for nodetype in nodetypes
     %% testing my luck
@@ -105,27 +129,45 @@ TEXT_PROG_FULL = """
 
 def test_toks_prog_literal():
     assert list(token_stream(TEXT_PROG_LITERAL)) == [
-        (TokType.TEXT, 'hello, world'),
-        (TokType.NEWLINE,),
-        (TokType.TEXT, 'this is awesome'),
-        (TokType.NEWLINE,)
+        TextToken('hello, world'),
+        NewlineToken(),
+        TextToken('this is awesome'),
+        NewlineToken()
+    ]
+
+
+def test_toks_prog_if_simplest():
+    assert list(token_stream(TEXT_PROG_IF_SIMPLEST)) == [
+        CtrlToken('', 'if', 'x is not None'),
+        TextToken('x is something'),
+        NewlineToken(),
+        CtrlToken('', '/if', None),
     ]
 
 
 def test_toks_prog_if_simple():
     assert list(token_stream(TEXT_PROG_IF_SIMPLE)) == [
-        (TokType.TEXT, 'always intro'),
-        (TokType.NEWLINE,),
-        (TokType.CTRL, 'if', 'x is not None'),
-        (TokType.TEXT, "x is something"),
-        (TokType.NEWLINE,),
-        (TokType.CTRL, '/if', None),
-        (TokType.CTRL, 'if', 'x is None'),
-        (TokType.TEXT, 'x is none'),
-        (TokType.NEWLINE,),
-        (TokType.CTRL, '/if', None),
-        (TokType.TEXT, 'always outro'),
-        (TokType.NEWLINE,),
+        TextToken('always intro'),
+        NewlineToken(),
+        CtrlToken('', 'if', 'x is not None'),
+        TextToken('x is something'),
+        NewlineToken(),
+        CtrlToken('', '/if', None),
+        CtrlToken('', 'if', 'x is None'),
+        TextToken('x is none'),
+        NewlineToken(),
+        CtrlToken('', '/if', None),
+        TextToken('always outro'),
+        NewlineToken(),
+    ]
+
+
+def test_toks_prog_for_simple_once():
+    assert list(token_stream(TEXT_PROG_FOR_SIMPLE)) == [
+        CtrlToken('', 'for', 'number in range(0, loops)'),
+        TextToken('hello!'),
+        NewlineToken(),
+        CtrlToken('', '/for', None)
     ]
 
 
@@ -143,7 +185,6 @@ def test_toks_prog_if_simple():
      "peter, john, joe\n"),
 
     # TODO: DSL stx --- dot-lookup and optional vals ?
-
 
     # if tests
     ("if_simple:none", TEXT_PROG_IF_SIMPLE, {'x': None},
@@ -165,7 +206,6 @@ def test_toks_prog_if_simple():
     ("if_elif_else:else", TEXT_PROG_IF_ELIF_ELSE, {'x': 1000},
      "intro\nx is a big positive number\noutro\n"),
 
-
     # for
     ("for_simple:1", TEXT_PROG_FOR_SIMPLE, {'loops': 1},
      "hello!\n"),
@@ -177,28 +217,26 @@ def test_toks_prog_if_simple():
     ("for_loopvar:3", TEXT_PROG_FOR_LOOPVAR, {'loops': 3},
      "1!\n2!\n3!\n"),
 
-    ("for_loopvars", TEXT_PROG_FOR_LOOPVARS,
-     {'entries': {'john': 'programmer'}},
-     "'john' => 'programmer'\n"),
+    ("for_if_else", TEXT_PROG_FOR_IF_ELSE, {'end': 3},
+     "0 is even\n1 is odd\n2 is even\n"),
+
+    ("if_for_else", TEXT_PROG_IF_FOR_ELSE, {'num': 2},
+     "0...\n1...\nDONE!\n"),
+    ("if_for_else", TEXT_PROG_IF_FOR_ELSE, {'num': 5},
+     "5 is a big number\n"),
+
     #
     # # components
     # # TODO: component lookup success
     # # TODO: component lookup failure
 ])
 def test_dsl_eval_progs(label, prog, scope_vars, result):
-    ctx = EvalContext({})
+    buf = StringIO()
+    ctx = EvalContext(LineWriter(buf), blocks={}, components={})
     tokens = TokenIterator(token_stream(prog))
     scope = Scope(scope_vars)
     dsl_eval_main(ctx, tokens, scope)
-    buf = StringIO()
-    ctx.out.render(buf)
+
     actual = buf.getvalue()
     # print(f"actual => {actual}")
     assert actual == result, f"'{label}' failed to produce expected result"
-
-# def test_smth():
-#     out = gen_loop_iterator("lbl, val in smth['entry']", {
-#         'smth': {'entry': [('one', 11), ('two', 22)]},
-#         'nodetypes': [('one', 1), ('two', 2)]})
-#     for env in out:
-#         print(f"iter env: {env}")
