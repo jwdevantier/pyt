@@ -210,11 +210,8 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
     to_str = str
     for token in tokens:
         if stop and stop(token):
-            if isinstance(token, CtrlToken) and token.keyword.startswith('/'):
-                ctx.writer.dedent()
             return
-        # typ, *vals = token
-        # if typ == TokType.TEXT:
+
         typ = type(token)
         if typ == TextToken:
             ctx.buffer_append(token.text)
@@ -237,20 +234,23 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
             ctx.writer.indent(token.prefix)
             if token.keyword == 'for':
                 dsl_eval_for(ctx, tokens, scope, token.args)
+                ctx.writer.dedent()
             elif token.keyword == 'if':
                 dsl_eval_if(ctx, tokens, scope, token.args)
+                ctx.writer.dedent()
             elif token.keyword[0].isupper():
                 component = ctx.components.get(token.keyword)
                 if not component:
                     raise RuntimeError(f"Unknown component '{token.keyword}'")
 
                 component._render_(ctx, tokens, scope, token.keyword, token.args)
+                ctx.writer.dedent()
             elif not token.keyword.startswith('/'):  # must be a block
-                # TODO: indent here
                 block = ctx.blocks.get(token.keyword)
                 if not block:
                     raise RuntimeError(f"Unknown block '{token.keyword}'")
                 block(ctx, tokens, scope, token.args)
+                ctx.writer.dedent()
             else:  # must be a close block tag - should not been seen
                 raise RuntimeError(
                     f"illegal nesting, got unexpected'{token.keyword}'")
@@ -296,18 +296,14 @@ def dsl_eval_if(ctx: EvalContext, tokens: TokenIterator, scope: Scope, cond_expr
         elif kw == 'else':
             dsl_eval_main(ctx, tokens, Scope(outer=scope), stop_at_ctrl_tokens({'/if'}))
         elif kw == '/if':
-            print("/IF reached")
+            # TODO: I don't think this branch is ever triggered
             break
         else:
-            raise RuntimeError("UNEXPECTED")
+            raise RuntimeError(f"eval if error - unexpected block '{kw}'")
 
         # TODO: revamp once we've settled on a data structure for Tokens
         token = tokens.current
         if not token or not isinstance(token, CtrlToken) or token.keyword not in accepted_tags:
-            print(f"TOKEN current: {tokens.current}")
-            print(f"TOKEN next: {tokens._next}")
-            for token in tokens:
-                print(f"TOK: {token}")
             raise RuntimeError(f"invalid nesting - expected {accepted_tags}, got: {token}")
 
         kw = token.keyword

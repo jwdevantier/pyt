@@ -3,7 +3,6 @@ from pyt.utils.template.dsl import *
 from io import StringIO
 
 
-
 # def test_smth():
 #     out = gen_loop_iterator("lbl, val in smth['entry']", {
 #         'smth': {'entry': [('one', 11), ('two', 22)]},
