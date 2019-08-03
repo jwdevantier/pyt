@@ -26,20 +26,20 @@ class Indentation(Enum):
 
 class LineWriter:
     def __init__(self, writer: IWriter):
-        self.indents = []
-        self._indent = ""
+        self.indents = ['']
         self.writer = writer
+        self.prefix = ""
 
-    def indent(self, indent_by: str):
-        self.indents.append(indent_by)
-        self._indent += indent_by
+    def indent(self, prefix: str):
+        self.indents.append(prefix)
+        self.prefix = prefix
 
     def dedent(self):
         self.indents.pop()
-        self._indent = "".join(self.indents)
+        self.prefix = self.indents[-1]
 
     def writeln(self, s: str) -> None:
-        self.writer.write(f"{self._indent}{s}\n")
+        self.writer.write(f"{self.prefix}{s}\n")
 
 
 _tstr = re_compile(r"(<<.*?>>)")
@@ -210,6 +210,12 @@ class Component:
             deindent_str_block(cls.TEMPLATE, ltrim=True))),
                       component_scope)
 
+def flush_buffer(ctx: EvalContext):
+    # flush buffer
+    if ctx.buffer[0][0:len(ctx.writer.prefix)] == ctx.writer.prefix:
+        ctx.buffer[0] = ctx.buffer[0][len(ctx.writer.prefix):]
+    ctx.writer.writeln("".join(ctx.buffer))
+    del ctx.buffer[:]
 
 def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t.Optional[t.Callable] = None):
     to_str = str
@@ -222,9 +228,7 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
             ctx.buffer_append(token.text)
         elif typ == NewlineToken:
             if len(ctx.buffer) != 0:
-                # flush buffer
-                ctx.writer.writeln("".join(ctx.buffer))
-                del ctx.buffer[:]
+                flush_buffer(ctx)
             else:
                 ctx.writer.writeln("")
         elif typ == ExprToken:
@@ -232,9 +236,7 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
             ctx.buffer_append(to_str(result))
         elif typ == CtrlToken:
             if len(ctx.buffer) != 0:
-                # flush buffer
-                ctx.writer.writeln("".join(ctx.buffer))
-                del ctx.buffer[:]
+                flush_buffer(ctx)
 
             ctx.writer.indent(token.prefix)
             if token.keyword == 'for':
@@ -295,6 +297,7 @@ def dsl_eval_if(ctx: EvalContext, tokens: TokenIterator, scope: Scope, cond_expr
                 # skip past all other branches in if-block
                 if not isinstance(tokens.current, CtrlToken) or tokens.current.keyword != '/if':
                     skip_tokens(tokens, stop_at_ctrl_tokens({'/if'}))
+
             else:
                 # skip branch
                 skip_tokens(tokens, stop_at_ctrl_tokens(accepted_tags))

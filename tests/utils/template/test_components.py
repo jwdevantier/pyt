@@ -3,30 +3,19 @@ from pyt.utils.template.dsl import *
 from io import StringIO
 
 
-# def test_smth():
-#     out = gen_loop_iterator("lbl, val in smth['entry']", {
-#         'smth': {'entry': [('one', 11), ('two', 22)]},
-#         'nodetypes': [('one', 1), ('two', 2)]})
-#     for env in out:
-#         print(f"iter env: {env}")
+def component_test(start_component: str, blocks=None, components=None, scope=None) -> str:
+    buf = StringIO()
 
-# TODO: chars should be keys from 'prop.tokens'
-# TODO: should define proptypes somewhere, including required
-# TODO: establish convention for calling
+    ctx = EvalContext(
+        LineWriter(buf),
+        blocks=blocks or {},
+        components=components or {})
+    tokens = TokenIterator(token_stream((
+        f"%{start_component}"
+        f"%/{start_component}")))
 
-# TODO: fix - how to ensure blocks are rendered with the right component lookup env
-# Component render should get Scope(?) and props and should return 'str'
-# which is the template to be rendered
-#
-# prop-renderer fns should be on the component class
-# static initialization can be done w. statements inside the class definition
-# ALL functions should be @staticmethod
-#
-# prop-renderer: _prop_<>(props: Props) -> t.Any
-#
-# schemas:
-#   props_spec(input: Props) -> <<SPEC OUTPUT>>
-#   scope_spec(input: Scope) -> <<SPEC OUTPUT>>
+    dsl_eval_main(ctx, tokens, Scope(scope or {}))
+    return buf.getvalue()
 
 
 class Outer(Component):
@@ -35,7 +24,7 @@ class Outer(Component):
     print("hello, world")
     print("more...")
     % /MyFN
-    end of world"""
+    print("done")"""
 
 
 class MyFN(Component):
@@ -46,27 +35,96 @@ class MyFN(Component):
     TEMPLATE = """
     def <<name>>(<<args>>):
         print("<<name>> invoked")
-
         % body
         print("<<name>> invoked")"""
 
 
-def test_xms():
-    buf = StringIO()
-    # TODO: some form of type coercion here ?
-    ctx = EvalContext(LineWriter(buf), blocks={}, components={
+def test_c1():
+    actual = component_test('Outer', components={
         'MyFN': MyFN,
         'Outer': Outer
-    })
-    tokens = TokenIterator(token_stream((
-        "%Outer"
-        "%/Outer"
-    )))
-    scope = Scope({
+    }, scope={
         'name': 'foo',
         'args': ['one', 'two', 'three']
     })
-    dsl_eval_main(ctx, tokens, scope)
-    actual = buf.getvalue()
+    expected = """\
+def foo(one, two, three):
+    print("foo invoked")
+    print("hello, world")
+    print("more...")
+    print("foo invoked")
+print("done")
+"""
     print(actual)
-    assert actual == "<some-res>", f"failed to produce expected result"
+    assert actual == expected, "failed to produce expected results"
+
+
+class PyClass(Component):
+    @classmethod
+    def _scope_(cls, scope: Scope, component_args: str) -> None:
+        scope['init_args'] = ", ".join((f"{arg}={defval or None}" for arg, defval in scope['args'].items()))
+        scope['repr_args'] = ", ".join(arg + '={self.' + arg + '}' for arg in scope['args'].keys())
+
+        parents = scope.get('from', None)
+        scope['parents'] = f"({', '.join(parents)})" if parents else ''
+
+    TEMPLATE = """
+    class <<name>><<parents>>:
+        def __init__(<<init_args>>):
+            % for arg in args.keys()
+            self.<<arg>> = <<arg>>
+            % /for
+        
+        def __eq__(self, other):
+            return (
+                isinstance(other, self.__class__)
+                % for arg in args.keys()
+                and other.<<arg>> == self.<<arg>>
+                % /for
+            )
+
+        def __ne__(self, other):
+            return not self.__eq__(other)
+        
+        def __repr__(self):
+            return f"<<name>>(<<repr_args>>)\""""
+
+
+def test_pyclass_component():
+    actual = component_test('Class', components={
+        'Class': PyClass,
+        'Outer': Outer
+    }, scope={
+        'name': 'CtrlToken',
+        'args': {
+            'prefix': '""',
+            'token': 'TokenNone',
+        },
+        'from': ['Token']
+    })
+    expected = """\
+class CtrlToken(Token):
+    def __init__(prefix="", token=TokenNone):
+        self.prefix = prefix
+        self.token = token
+    
+    def __eq__(self, other):
+        return (
+            isinstance(other, self.__class__)
+            and other.prefix == self.prefix
+            and other.token == self.token
+        )
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+    
+    def __repr__(self):
+        return f"CtrlToken(prefix={self.prefix}, token={self.token})"
+"""
+    if actual != expected:
+        print("-----Actual:")
+        print(actual)
+        print("-----Expected:")
+        print(expected)
+        print("-----")
+    assert actual == expected, "failed to produce expected results"
