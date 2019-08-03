@@ -180,25 +180,30 @@ class Component:
         # Evaluate 'body' the DSL contained inside the component block
         # => solves the issue of the surrounding component DSL scope
         #    polluting the scope for the body supplied the component
+
+        # Must consume the tokens for the DSL in the body of the component
+        # otherwise an illegal nesting error would be triggered in the main
+        # DSL parsing function.
+        # (also, this enables the use of the same body multiple times in the
+        # component output, unlikely, but possible.)
         body_ctx = ctx.derived()
-        body_rendered = False
+        body_tokens = []
+        for tok in tokens:
+            if isinstance(tok, CtrlToken) and tok.keyword == f"/{component_name}":
+                break
+            body_tokens.append(tok)
+
+        def render_body(_: EvalContext, __: TokenIterator, ___: Scope, args: str):
+            if args:
+                raise RuntimeError("body block cannot take arguments")
+
+            dsl_eval_main(
+                body_ctx, TokenIterator(iter(body_tokens)), Scope(outer=scope),
+                stop_at_ctrl_tokens({f'/{component_name}'}))
 
         # Define scope supplied to the rendering
         component_scope = Scope(outer=scope)
         cls._scope_(component_scope, component_args)
-
-        # TODO: lazily render children
-        def render_body(_: EvalContext, __: TokenIterator, ___: Scope, args: str):
-            nonlocal body_rendered
-            if args:
-                raise RuntimeError("body block cannot take arguments")
-
-            if not body_rendered:
-                dsl_eval_main(
-                    body_ctx, tokens, Scope(outer=scope),
-                    stop_at_ctrl_tokens({f'/{component_name}'}))
-                body_rendered = True
-
         component_ctx = ctx.derived(with_blocks={'body': render_body})
         # Render the component itself
         dsl_eval_main(component_ctx, TokenIterator(token_stream(
