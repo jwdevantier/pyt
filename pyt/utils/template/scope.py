@@ -18,13 +18,6 @@ class Scope(MutableMapping):
         raise KeyError(key)
 
     def __setitem__(self, key, value):
-        curr: 'Scope' = self
-        while curr is not None:
-            if key in curr._data:
-                curr._data[key] = value
-                return
-            curr = curr._outer
-        # not defined in any env, define in innermost (this) env
         self._data[key] = value
 
     def __delitem__(self, key):
@@ -52,25 +45,6 @@ class Scope(MutableMapping):
             keys.update(curr._data.keys())
             curr = curr._outer
         return len(keys)
-
-    def define(self, bindings: t.Mapping[str, t.Any]) -> None:
-        """
-        Define bindings directly in the innermost (this) scope.
-
-        This is useful for loop variables and the like which should NOT
-        interfere with enclosing scopes.
-
-        Parameters
-        ----------
-        bindings
-            A mapping structure of identifiers and their
-
-        Returns
-        -------
-            None
-        """
-        for ident, val in bindings.items():
-            self._data[ident] = val
 
     def __repr__(self):
         outer = self._outer

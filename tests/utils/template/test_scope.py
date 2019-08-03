@@ -102,20 +102,6 @@ def test_scope_set_define_outer():
         pytest.fail(f"(init) s1 should be unable to resolve entry defined in s2")
 
 
-def test_scope_set_update_outer():
-    """Ensure values defined in an outer scope can be updated from an inner scope
-
-    (i.e. - we are NOT practicing lexical binding)"""
-    s1 = Scope()
-    s2 = Scope(outer=s1)
-
-    s1['foo'] = 'fooval'
-    assert s1['foo'] == 'fooval', f'sanity test, get is broken'
-    s2['foo'] = 'fooval_s2'
-    assert s2['foo'] == 'fooval_s2', f'sanity test, setting in inner env broken'
-    assert s1['foo'] == 'fooval_s2', f'e1 entry not updated - error!'
-
-
 def test_in_simple():
     s = Scope()
     vals = {
@@ -159,7 +145,7 @@ def test_in_nested():
 # TODO: test  len
 # TODO: test iter()
 
-def test_scope_define():
+def test_scope_redefine():
     s1 = Scope()
     vals = {
         'one': 'a',
@@ -171,7 +157,7 @@ def test_scope_define():
 
     s2 = Scope(outer=s1)
     for ident, val in vals.items():
-        s2.define({k: v + "!" for k, v in vals.items()})
+        s2[ident] = val + "!"
 
     for ident in vals.keys():
         assert s1[ident] + "!" == s2[ident]
