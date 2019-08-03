@@ -8,10 +8,10 @@ from pyt.utils.template.scope import Scope
 from pyt.utils.text import deindent_str_block
 from pyt.protocols import IWriter
 
-
 Element = t.Union[str,]
 Blocks = t.Dict[str, t.Callable[['EvalContext', 'TokenIterator', Scope], None]]
 Components = t.Dict[str, t.Type['Component']]
+
 
 # TODO: issue - %% lines aren't rewritten
 # Do not go templite (compiled) approach, instead write an interpreted approach
