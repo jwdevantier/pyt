@@ -1,5 +1,9 @@
 import pytest
 from pyt.utils.template.dsl import *
+from pyt.utils.template.dsl import(
+    token_stream, TokenIterator,
+    LineWriter, EvalContext, dsl_eval_main
+)
 from io import StringIO
 
 

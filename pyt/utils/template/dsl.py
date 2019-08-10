@@ -8,6 +8,8 @@ from pyt.utils.template.scope import Scope
 from pyt.utils.text import deindent_str_block
 from pyt.protocols import IWriter
 
+__all__ = ['render', 'Component', 'Scope']
+
 Element = t.Union[str,]
 Blocks = t.Dict[str, t.Callable[['EvalContext', 'TokenIterator', Scope], None]]
 Components = t.Dict[str, t.Type['Component']]
@@ -25,10 +27,11 @@ class Indentation(Enum):
 
 
 class LineWriter:
-    def __init__(self, writer: IWriter):
+    def __init__(self, writer: IWriter, prefix: str = ''):
         self.indents = ['']
         self.writer = writer
-        self.prefix = ""
+        self.prefix = ''
+        self.base_prefix = prefix
 
     def indent(self, prefix: str):
         self.indents.append(prefix)
@@ -39,7 +42,7 @@ class LineWriter:
         self.prefix = self.indents[-1]
 
     def writeln(self, s: str) -> None:
-        self.writer.write(f"{self.prefix}{s}\n")
+        self.writer.write(f"{self.base_prefix}{self.prefix}{s}\n")
 
 
 _tstr = re_compile(r"(<<.*?>>)")
@@ -210,12 +213,14 @@ class Component:
             deindent_str_block(cls.TEMPLATE, ltrim=True))),
                       component_scope)
 
+
 def flush_buffer(ctx: EvalContext):
     # flush buffer
     if ctx.buffer[0][0:len(ctx.writer.prefix)] == ctx.writer.prefix:
         ctx.buffer[0] = ctx.buffer[0][len(ctx.writer.prefix):]
     ctx.writer.writeln("".join(ctx.buffer))
     del ctx.buffer[:]
+
 
 def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t.Optional[t.Callable] = None):
     to_str = str
@@ -342,3 +347,16 @@ def gen_loop_iterator(for_src, env: t.Mapping):
         , env_globals, env_locals)
 
     return env_locals['_it']
+
+
+def render(buf: IWriter, prog: str, scope: Scope,
+           blocks: t.Optional[Blocks] = None,
+           components: t.Optional[Components] = None,
+           prefix: str = ''):
+    ctx = EvalContext(
+        LineWriter(buf, prefix),
+        blocks=blocks or {},
+        components=components or {})
+    tokens = TokenIterator(token_stream(deindent_str_block(prog, ltrim=True)))
+
+    dsl_eval_main(ctx, tokens, scope)
