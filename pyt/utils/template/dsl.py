@@ -339,7 +339,8 @@ def gen_loop_iterator(for_src, env: t.Mapping):
     """
     # TODO: ? if we provide the dict directly, would the builtins entry be written into it?
     env_globals = dict(env)
-    bindings, iterable = (x.strip() for x in for_src.split('in'))
+    # TODO: find alternative way to determine bindings and loopvar - too brittle
+    bindings, iterable = (x.strip() for x in for_src.split(' in '))
     env_locals = {}
     bindings_lst = (f"'{ident}': {ident}" for ident in (x.strip() for x in bindings.split(',')))
     exec(
