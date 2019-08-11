@@ -1,11 +1,11 @@
 import pytest
-from pyt.utils.template.scope import Scope
+from pyt.utils.template.scope import *
 
 
 def test_scope_init():
     e = Scope()
     with pytest.raises(KeyError):
-        e['hello']
+        _ = e['hello']
     assert len(e) == 0, "env should have no entries it"
     assert list(iter(e)) == [], "env should be empty"
 
@@ -16,7 +16,7 @@ def test_scope_get_simple():
     """
     e = Scope()
     with pytest.raises(KeyError):
-        e['foo']
+        _ = e['foo']
 
     e._data['foo'] = 'hello'
     assert e['foo'] == 'hello'
@@ -31,7 +31,7 @@ def test_scope_set_simple():
     """
     e = Scope()
     with pytest.raises(KeyError):
-        e['foo']
+        _ = e['foo']
 
     e['foo'] = 'hello'
     assert e._data['foo'] == 'hello'
@@ -46,7 +46,7 @@ def test_scope_get_set_simple():
     """
     e = Scope()
     with pytest.raises(KeyError):
-        e['foo']
+        _ = e['foo']
 
     e['foo'] = 'hello'
     assert e['foo'] == 'hello'
@@ -98,7 +98,7 @@ def test_scope_set_define_outer():
 
     assert s2['bar'] == 'barval', '(init) sanity test, s2 is broken!?'
     with pytest.raises(KeyError):
-        s1['bar']
+        _ = s1['bar']
         pytest.fail(f"(init) s1 should be unable to resolve entry defined in s2")
 
 
@@ -170,7 +170,7 @@ def test_scope_del_simple():
 
     del s1['one']
     with pytest.raises(KeyError):
-        s1['one']
+        _ = s1['one']
         pytest.fail("accessing 'one' did not raise KeyError ?")
 
 
@@ -183,5 +183,19 @@ def test_scope_del_nested():
     print(repr(s2))
     del s2['one']
     with pytest.raises(KeyError):
-        s1['one']
+        _ = s1['one']
         pytest.fail(f"accessing 'one' did not raise a KeyError - entry should've been deleted")
+
+
+def test_bind_w_leading_uppercase_err():
+    s1 = Scope(allow_leading_upper=False)
+
+    with pytest.raises(ScopeInvalidIdentifier):
+        s1['One'] = "smth"
+        pytest.fail(f"expected an error when assigning a value to invalid identifier 'One'")
+
+
+def test_bind_w_leading_uppercase_ok():
+    s1 = Scope(allow_leading_upper=True)
+
+    s1['One'] = "smth"

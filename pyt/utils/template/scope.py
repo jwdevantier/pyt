@@ -2,10 +2,27 @@ from collections.abc import MutableMapping
 import typing as t
 
 
+class ScopeError(Exception):
+    pass
+
+
+class ScopeInvalidIdentifier(ScopeError):
+    def __init__(self, scope: 'Scope', identifier: str):
+        self.scope = scope
+        self.identifier = identifier
+        super().__init__(f"cannot bind '{identifier}' - name not allowed")
+
+
 class Scope(MutableMapping):
-    def __init__(self, mapping: t.Optional[t.Mapping] = None, outer: t.Optional['Scope'] = None):
+    __slots__ = ['_outer', '_data', '_allow_leading_upper']
+
+    def __init__(self,
+                 mapping: t.Optional[t.Mapping] = None,
+                 outer: t.Optional['Scope'] = None,
+                 allow_leading_upper=False):
         self._outer = outer
         self._data = {}
+        self._allow_leading_upper = allow_leading_upper
         if mapping:
             self._data.update(mapping)
 
@@ -18,6 +35,8 @@ class Scope(MutableMapping):
         raise KeyError(key)
 
     def __setitem__(self, key, value):
+        if key[0].isupper() and not self._allow_leading_upper:
+            raise ScopeInvalidIdentifier(self, key)
         self._data[key] = value
 
     def __delitem__(self, key):
