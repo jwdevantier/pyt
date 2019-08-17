@@ -1,30 +1,37 @@
 import pytest
 from pyt.utils.template.dsl import *
-from pyt.utils.template.dsl import(
+from pyt.utils.template.dsl import (
     token_stream, TokenIterator,
     LineWriter, EvalContext, dsl_eval_main
 )
 from io import StringIO
+import typing as t
 
 
-def component_test(start_component: str, blocks=None, components=None, scope=None) -> str:
+# TODO: need to rewrite helper here - must pass args, so let's refactor to
+#       take in a program instead of just a component name.
+def component_test(prog: str, blocks=None, components=None, scope=None) -> str:
     buf = StringIO()
 
     ctx = EvalContext(
         LineWriter(buf),
         blocks=blocks or {},
         components=components or {})
-    tokens = TokenIterator(token_stream((
-        f"%{start_component}"
-        f"%/{start_component}")))
+    tokens = TokenIterator(token_stream(prog))
 
     dsl_eval_main(ctx, tokens, Scope(scope or {}))
     return buf.getvalue()
 
 
 class Outer(Component):
-    TEMPLATE = """
-    % MyFN
+    def __init__(self, fn_name, fn_args):
+        self.fn_name = fn_name
+        self.fn_args = fn_args
+
+    @property
+    def template(self) -> str:
+        return """
+    % MyFN self.fn_name, self.fn_args
     print("hello, world")
     print("more...")
     % /MyFN
@@ -32,25 +39,32 @@ class Outer(Component):
 
 
 class MyFN(Component):
-    @classmethod
-    def _scope_(cls, scope: Scope, component_args: str) -> None:
-        scope['args'] = ", ".join(scope['args'])
+    def __init__(self, name: str, args: t.List[str]):
+        self.name = name
+        self.args = ', '.join(args)
 
-    TEMPLATE = """
-    def <<name>>(<<args>>):
-        print("<<name>> invoked")
+    @property
+    def template(self) -> str:
+        return """
+    def <<self.name>>(<<self.args>>):
+        print("<<self.name>> invoked")
         % body
-        print("<<name>> invoked")"""
+        print("<<self.name>> invoked")"""
 
 
 def test_c1():
-    actual = component_test('Outer', components={
+    components = {
         'MyFN': MyFN,
         'Outer': Outer
-    }, scope={
+    }
+    scope = {
         'name': 'foo',
         'args': ['one', 'two', 'three']
-    })
+    }
+    prog = """\
+%Outer name, args
+%/Outer"""
+    actual = component_test(prog, components=components, scope=scope)
     expected = """\
 def foo(one, two, three):
     print("foo invoked")
@@ -64,25 +78,29 @@ print("done")
 
 
 class PyClass(Component):
-    @classmethod
-    def _scope_(cls, scope: Scope, component_args: str) -> None:
-        scope['init_args'] = ", ".join((f"{arg}={defval or None}" for arg, defval in scope['args'].items()))
-        scope['repr_args'] = ", ".join(arg + '={self.' + arg + '}' for arg in scope['args'].keys())
+    def __init__(self, name: str, args: t.Mapping[str, t.Any], parents=None):
+        self.name = name
+        self.args = args
+        self.init_args = ", ".join((
+            f"{arg}={defval or None}" for arg, defval
+            in args.items()))
+        self.repr_args = ", ".join(arg + '={self.' + arg + '}' for arg
+                                   in args.keys())
+        self.parents = f"({', '.join(parents)})" if parents else ''
 
-        parents = scope.get('from', None)
-        scope['parents'] = f"({', '.join(parents)})" if parents else ''
-
-    TEMPLATE = """
-    class <<name>><<parents>>:
-        def __init__(<<init_args>>):
-            % for arg in args.keys()
+    @property
+    def template(self) -> str:
+        return """\
+    class <<self.name>><<self.parents>>:
+        def __init__(<<self.init_args>>):
+            % for arg in self.args.keys()
             self.<<arg>> = <<arg>>
             % /for
         
         def __eq__(self, other):
             return (
                 isinstance(other, self.__class__)
-                % for arg in args.keys()
+                % for arg in self.args.keys()
                 and other.<<arg>> == self.<<arg>>
                 % /for
             )
@@ -91,21 +109,25 @@ class PyClass(Component):
             return not self.__eq__(other)
         
         def __repr__(self):
-            return f"<<name>>(<<repr_args>>)\""""
+            return f"<<self.name>>(<<self.repr_args>>)\""""
 
 
 def test_pyclass_component():
-    actual = component_test('Class', components={
-        'Class': PyClass,
-        'Outer': Outer
-    }, scope={
+    components = {
+        'Class': PyClass
+    }
+    scope = {
         'name': 'CtrlToken',
         'args': {
             'prefix': '""',
             'token': 'TokenNone',
         },
-        'from': ['Token']
-    })
+        'parents': ['Token']
+    }
+    prog = """\
+%Class name=name, args=args, parents=parents
+%/Class"""
+    actual = component_test(prog, components=components, scope=scope)
     expected = """\
 class CtrlToken(Token):
     def __init__(prefix="", token=TokenNone):

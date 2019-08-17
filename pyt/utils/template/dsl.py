@@ -1,5 +1,6 @@
 import typing as t
-from io import StringIO
+
+from abc import ABC, abstractmethod
 from enum import Enum, unique as enum_unique_values
 from re import compile as re_compile
 
@@ -158,60 +159,27 @@ class EvalContext:
 # one method for prepping props
 # optional hooks for specs
 # TODO: do I *HAVE* to rely on people implementing _scope_ ?
-class Component:
-    TEMPLATE = ""
+class Component(ABC):
+    # TODO: wrap this up in a function to have
+    @property
+    @abstractmethod
+    def template(self) -> str:
+        pass
 
-    @classmethod
-    def _scope_(cls, scope: Scope, component_args: str) -> None:
+    def props(self, props: Scope) -> None:
         """
+        Hook for manipulating props.
 
         Parameters
         ----------
-        component_args
-            any arguments given after the component name - parsing this string
-            is up to the component.
+        props
+            arguments given to this component from the calling context.
 
         Returns
         -------
-            A new scope
+            None - the props object itself is modified as needed.
         """
         pass
-
-    @classmethod
-    def _render_(cls, ctx: EvalContext, tokens: TokenIterator, scope: Scope,
-                 component_name: str, component_args: str):
-        # Evaluate 'body' the DSL contained inside the component block
-        # => solves the issue of the surrounding component DSL scope
-        #    polluting the scope for the body supplied the component
-
-        # Must consume the tokens for the DSL in the body of the component
-        # otherwise an illegal nesting error would be triggered in the main
-        # DSL parsing function.
-        # (also, this enables the use of the same body multiple times in the
-        # component output, unlikely, but possible.)
-        body_ctx = ctx.derived()
-        body_tokens = []
-        for tok in tokens:
-            if isinstance(tok, CtrlToken) and tok.keyword == f"/{component_name}":
-                break
-            body_tokens.append(tok)
-
-        def render_body(_: EvalContext, __: TokenIterator, ___: Scope, args: str):
-            if args:
-                raise RuntimeError("body block cannot take arguments")
-
-            dsl_eval_main(
-                body_ctx, TokenIterator(iter(body_tokens)), Scope(outer=scope),
-                stop_at_ctrl_tokens({f'/{component_name}'}))
-
-        # Define scope supplied to the rendering
-        component_scope = Scope(outer=scope)
-        cls._scope_(component_scope, component_args)
-        component_ctx = ctx.derived(with_blocks={'body': render_body})
-        # Render the component itself
-        dsl_eval_main(component_ctx, TokenIterator(token_stream(
-            deindent_str_block(cls.TEMPLATE, ltrim=True))),
-                      component_scope)
 
 
 def flush_buffer(ctx: EvalContext):
@@ -251,12 +219,16 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
                 dsl_eval_if(ctx, tokens, scope, token.args)
                 ctx.writer.dedent()
             elif token.keyword[0].isupper():
-                component = ctx.components.get(token.keyword)
-                if not component:
+                component_class = ctx.components.get(token.keyword)
+                if not component_class:
                     raise RuntimeError(f"Unknown component '{token.keyword}'")
 
-                component._render_(ctx, tokens, scope, token.keyword, token.args)
+                component = py_eval(
+                    Scope({token.keyword: component_class}, scope),
+                    f"_it = {token.keyword}({token.args if token.args else ''})")['_it']
+                dsl_eval_component(ctx, tokens, scope, component, token.keyword)
                 ctx.writer.dedent()
+
             elif not token.keyword.startswith('/'):  # must be a block
                 block = ctx.blocks.get(token.keyword)
                 if not block:
@@ -266,6 +238,52 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
             else:  # must be a close block tag - should not been seen
                 raise RuntimeError(
                     f"illegal nesting, got unexpected'{token.keyword}'")
+
+
+def dsl_eval_component(
+        ctx: EvalContext, tokens: TokenIterator, scope: Scope,
+        component: Component, name: str):
+    # Need to
+    # * eval the 'body' of the component (the DSL contained within
+    #   the start and end component block) in the context of the
+    #   component parent.
+    #
+    #   => Ensures bindings & components aren't redefined or missing
+    #
+    # * consume the tokens of the body right away, store in a list
+    #   => Ensures body can be rendered multiple times
+    #
+    # * Initialise component - take component args and turn
+    #   % Foo one, two='three'
+    #   into:
+    #   Foo(one, two='three')
+    #
+    #   => Enables full Python exprs
+    #   => Ensures DSL is close to vanilla Python
+    #
+    # * bind 'self' to the component instance
+    body_ctx = ctx.derived()
+    body_tokens = []
+    for tok in tokens:
+        if isinstance(tok, CtrlToken) and tok.keyword == f"/{name}":
+            break
+        body_tokens.append(tok)
+
+    def render_body(_: EvalContext, __: TokenIterator, ___: Scope, args: str):
+        if args:
+            raise RuntimeError("body block cannot take arguments")
+
+        dsl_eval_main(
+            body_ctx, TokenIterator(iter(body_tokens)), Scope(outer=scope),
+            stop_at_ctrl_tokens({f'/{name}'}))
+
+    component_ctx = ctx.derived(with_blocks={'body': render_body})
+    # Render the component itself
+    # (note: we are now supplying an almost empty scope, only explicitly passed
+    # (arguments are carried into the context of the "called" component.)
+    dsl_eval_main(component_ctx, TokenIterator(token_stream(
+        deindent_str_block(component.template, ltrim=True))),
+                  Scope({'self': component}))
 
 
 def dsl_eval_for(ctx: EvalContext, tokens: TokenIterator, scope: Scope, for_args: str):
@@ -337,17 +355,20 @@ def gen_loop_iterator(for_src, env: t.Mapping):
 
 
     """
-    # TODO: ? if we provide the dict directly, would the builtins entry be written into it?
-    env_globals = dict(env)
-    # TODO: find alternative way to determine bindings and loopvar - too brittle
     bindings, iterable = (x.strip() for x in for_src.split(' in '))
-    env_locals = {}
-    bindings_lst = (f"'{ident}': {ident}" for ident in (x.strip() for x in bindings.split(',')))
-    exec(
-        "_it = ({" f"{', '.join(bindings_lst)}" "} " f"for {bindings} in {iterable})"
-        , env_globals, env_locals)
+    bindings_lst = (
+        f"'{ident}': {ident}" for ident in (
+        x.strip() for x in bindings.split(',')))
+    return py_eval(
+        env,
+        "_it = ({" f"{', '.join(bindings_lst)}" "} " f"for {bindings} in {iterable})",
+    )['_it']
 
-    return env_locals['_it']
+
+def py_eval(env: t.Mapping, prog: str) -> t.Mapping:
+    eval_locals = {}
+    exec(prog, dict(env), eval_locals)
+    return eval_locals
 
 
 def render(buf: IWriter, prog: str, scope: Scope,
