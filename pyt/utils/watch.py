@@ -2,6 +2,7 @@ from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
 from os import DirEntry
 from pathlib import Path
+from os.path import relpath
 import asyncio
 import signal
 import logging
@@ -51,15 +52,14 @@ class CompileWatcher(AllWatcher):
         super().__init__(path)
 
     def should_watch_dir(self, entry: DirEntry) -> bool:
-        if entry.path.startswith('/tmp'):
-            print(f"TMP DIR: {self.ignore_dir(entry.path)}")
-        return self.ignore_dir(entry.path) is None  # Should add dirs and subdirs here, too
+        dir_path: str = relpath(entry.path, self.root_path)
+        return self.ignore_dir(dir_path) is None  # Should add dirs and subdirs here, too
 
     def should_watch_file(self, entry: DirEntry) -> bool:
-        fpath: str = entry.path
-        if fpath.endswith(self.temp_file_suffix) or self.ignore_file(entry.path):
+        file_path: str = relpath(entry.path, self.root_path)
+        if file_path.endswith(self.temp_file_suffix) or self.ignore_file(file_path):
             return False
-        return self.include_file(entry.path) is not None
+        return self.include_file(file_path) is not None
 
 
 class SearchPathsWatcher(AllWatcher):
