@@ -1,6 +1,6 @@
 import pytest
-from pyt.utils.template.dsl import *
-from pyt.utils.template.dsl import (
+from ghostwriter.utils.template.dsl import *
+from ghostwriter.utils.template.dsl import (
     token_stream, EvalContext, LineWriter, TokenIterator,
     dsl_eval_main)
 from pyt.utils.template.tokens import *

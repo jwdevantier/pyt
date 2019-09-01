@@ -36,14 +36,14 @@ install_requires = list(requirements_from('requirements.txt'))
 test_requires = list(requirements_from('requirements.dev.txt'))
 
 setup(
-    name='pyt',
+    name='ghostwriter',
     version='0.1',
     packages=find_packages(),
     license='MIT',
     long_description=open('README.md').read(),
     entry_points={
         'console_scripts': [
-            'pyt = pyt.__main__:cli'
+            'gwrite = ghostwriter.__main__:cli'
         ]
     },
     install_requires=install_requires,
@@ -51,12 +51,12 @@ setup(
     tests_require=test_requires,
     # Cython Modules
     ext_modules=cythonize([
-        Extension("pyt.parser.fileparser", [
-            "pyt/parser/fileparser.pyx",
-            "pyt/parser/wcsenc.c"]),
-        Extension("pyt.utils.spec.spec", ["pyt/utils/spec/spec.pyx"]),
-        Extension("pyt.utils.fhash.fhash", ["pyt/utils/fhash/fhash.pyx"]),
-        Extension("pyt.utils.template.tokens", ["pyt/utils/template/tokens.pyx"])
+        Extension("ghostwriter.parser.fileparser", [
+            "ghostwriter/parser/fileparser.pyx",
+            "ghostwriter/parser/wcsenc.c"]),
+        Extension("ghostwriter.utils.spec.spec", ["ghostwriter/utils/spec/spec.pyx"]),
+        Extension("ghostwriter.utils.fhash.fhash", ["ghostwriter/utils/fhash/fhash.pyx"]),
+        Extension("ghostwriter.utils.template.tokens", ["ghostwriter/utils/template/tokens.pyx"])
     ], annotate=True)
 
 )

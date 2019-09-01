@@ -15,8 +15,8 @@ from re import compile as re_compile
 from typing_extensions import Protocol
 from watchgod.watcher import AllWatcher
 
-from pyt.utils import itools
-from pyt.cli.conf import Configuration
+from ghostwriter.utils import itools
+from ghostwriter.cli.conf import Configuration
 
 log = logging.getLogger(__name__)
 

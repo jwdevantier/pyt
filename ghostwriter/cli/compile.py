@@ -11,14 +11,14 @@ from time import time
 from watchgod.watcher import Change
 import colorama as clr
 
-from pyt.parser import Parser, Context, PARSE_OK, parse_result_err, PytSnippetError
-import pyt.parser as pparse
-from pyt.utils.decorators import Debounce
-from pyt.protocols import IWriter
-from pyt.utils.fhash import file_hash
+from ghostwriter.parser import Parser, Context, PARSE_OK, parse_result_err, GhostwriterSnippetError
+import ghostwriter.parser as pparse
+from ghostwriter.utils.decorators import Debounce
+from ghostwriter.protocols import IWriter
+from ghostwriter.utils.fhash import file_hash
 
-from pyt.utils.watch import Watcher, SearchPathsWatcher, CompileWatcher, MPScheduler, watch_dirs, WatcherConfig
-from pyt.cli.conf import Configuration, ConfParser
+from ghostwriter.utils.watch import Watcher, SearchPathsWatcher, CompileWatcher, MPScheduler, watch_dirs, WatcherConfig
+from ghostwriter.cli.conf import Configuration, ConfParser
 
 log = logging.getLogger(__name__)
 
@@ -166,12 +166,12 @@ class FileChecksums:
                 fmap.pop(fpath, None)
 
 
-def print_snippet_error(e: PytSnippetError) -> None:
+def print_snippet_error(e: GhostwriterSnippetError) -> None:
     """
     Print formatted error message, summarizing the details leading to a snippet expansion error.
     Parameters
     ----------
-    e : PytSnippetError
+    e : GhostwriterSnippetError
 
     Returns
     -------
@@ -218,7 +218,7 @@ class MPCompiler(MPScheduler):
                 if out:
                     log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
                     log.error(f"in: {fpath}")
-            except PytSnippetError as e:
+            except GhostwriterSnippetError as e:
                 print_snippet_error(e)
             fpath = jobs.recv()
 
@@ -238,7 +238,7 @@ def do_compile_singlecore(parser_conf: ConfParser, walker: CompileWatcher,
             if out != 0:
                 log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
                 log.error(f"in: {entry.path}")
-        except PytSnippetError as e:
+        except GhostwriterSnippetError as e:
             print_snippet_error(e)
     log.info(f"parsed {num_files_parsed} files during compile pass")
 

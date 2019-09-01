@@ -1,8 +1,8 @@
 from pathlib import Path
 import yaml
 import typing as t
-from pyt.utils import spec as s
-from pyt.utils.error import PytError
+from ghostwriter.utils import spec as s
+from ghostwriter.utils.error import GhostwriterError
 from multiprocessing import cpu_count
 from os.path import expanduser
 import io
@@ -10,9 +10,9 @@ import logging
 
 log = logging.getLogger(__file__)
 
-CONF_NAME = "pyt.conf.yml"
+CONF_NAME = "ghostwriter.conf.yml"
 
-PYT_CONF_LOGGING_SPEC = s.keys({
+GW_CONF_LOGGING_SPEC = s.keys({
     'level': s.opt(
         s.inseq(['debug', 'info', 'warning', 'error', 'critical']),
         'info'),
@@ -80,11 +80,11 @@ class Directory(s.SpecBase):
         return "Directory"
 
 
-PYT_CONF_PARSER_SPEC = s.keys({
+GW_CONF_PARSER_SPEC = s.keys({
     'open': s.opt(s.str, '<@@'),
     'close': s.opt(s.str, '@@>'),
     'processes': s.opt(s.predicate(_natint, 'positive int'), cpu_count()),
-    'temp_file_suffix': s.opt(s.str, '.tmp.pyt'),
+    'temp_file_suffix': s.opt(s.str, '.gw.tmp'),
     'include_patterns': s.req(s.seqof(s.str)),
     'ignore_patterns': s.opt(s.seqof(s.str), []),
     'ignore_dir_patterns': s.opt(s.seqof(s.str), []),
@@ -94,15 +94,15 @@ PYT_CONF_PARSER_SPEC = s.keys({
     }))
 })
 
-PYT_CONF_SPEC = s.keys({
-    'logging': PYT_CONF_LOGGING_SPEC,
-    'parser': PYT_CONF_PARSER_SPEC,
+GW_CONF_SPEC = s.keys({
+    'logging': GW_CONF_LOGGING_SPEC,
+    'parser': GW_CONF_PARSER_SPEC,
 })
 
 
 # TODO: improve - in particular, the error formatting needs to show the data and
 #       the error
-class SpecError(PytError):
+class SpecError(GhostwriterError):
     def __init__(self, spec: s.Spec, value: t.Any):
         self.spec = spec
         self.value = value
@@ -115,8 +115,8 @@ class SpecError(PytError):
 
 class ConfLogging:
     def __init__(self, conf):
-        if not s.valid(PYT_CONF_LOGGING_SPEC, conf):
-            raise SpecError(PYT_CONF_LOGGING_SPEC, conf)
+        if not s.valid(GW_CONF_LOGGING_SPEC, conf):
+            raise SpecError(GW_CONF_LOGGING_SPEC, conf)
         self.level: str = conf['level']
         self.format: str = conf['format']
         self.datefmt: str = conf['datefmt']
@@ -129,11 +129,11 @@ class ConfLogging:
 
 class ConfParser:
     def __init__(self, conf):
-        conf_c = s.conform(PYT_CONF_PARSER_SPEC, conf)
+        conf_c = s.conform(GW_CONF_PARSER_SPEC, conf)
         if conf_c == s.Invalid:
             raise RuntimeError("LOLCAEK")
-        if not s.valid(PYT_CONF_PARSER_SPEC, conf):
-            raise SpecError(PYT_CONF_PARSER_SPEC, conf)
+        if not s.valid(GW_CONF_PARSER_SPEC, conf):
+            raise SpecError(GW_CONF_PARSER_SPEC, conf)
         self.open = conf['open']
         self.close = conf['close']
         self.processes = conf['processes']
@@ -156,8 +156,8 @@ class ConfParser:
 
 class Configuration:
     def __init__(self, project: Path, conf: dict):
-        if not s.valid(PYT_CONF_SPEC, conf):
-            raise SpecError(PYT_CONF_SPEC, conf)
+        if not s.valid(GW_CONF_SPEC, conf):
+            raise SpecError(GW_CONF_SPEC, conf)
         self.project: Path = project
         self.logging = ConfLogging(conf['logging'])
         self.parser = ConfParser(conf['parser'])
@@ -170,7 +170,7 @@ class Configuration:
             ">")
 
 
-class ConfigurationNotFoundError(PytError):
+class ConfigurationNotFoundError(GhostwriterError):
     def __init__(self, project_dir: Path):
         self.project_dir = project_dir
         super().__init__(f"Could not find '{CONF_NAME}' in '{project_dir}'")
@@ -181,19 +181,19 @@ class ConfigurationFileInvalidError(SpecError):
 
 
 def load(project: Path):
-    conf_path = project.joinpath("pyt.conf.yml")
+    conf_path = project.joinpath(CONF_NAME)
     try:
         with open(str(conf_path), 'r') as f:
             config = yaml.safe_load(f)
-        if not s.valid(PYT_CONF_SPEC, config):
-            raise ConfigurationFileInvalidError(PYT_CONF_SPEC, config)
+        if not s.valid(GW_CONF_SPEC, config):
+            raise ConfigurationFileInvalidError(GW_CONF_SPEC, config)
     except FileNotFoundError as e:
         raise ConfigurationNotFoundError(project) from e
     # except PermissionError
-    config_c = s.conform(PYT_CONF_SPEC, config)
+    config_c = s.conform(GW_CONF_SPEC, config)
     if config_c == s.Invalid:
         # Should never happen here - we already validated the spec
-        ConfigurationFileInvalidError(PYT_CONF_SPEC, config)
+        ConfigurationFileInvalidError(GW_CONF_SPEC, config)
 
     pp_log_conf(config_c)
     return Configuration(project, config_c)

@@ -1,5 +1,5 @@
 import pytest
-from pyt.utils import spec as s
+from ghostwriter.utils import spec as s
 
 
 # !! These tests rely on the 'Predicate' spec functioning

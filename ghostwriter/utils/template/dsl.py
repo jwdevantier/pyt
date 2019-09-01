@@ -5,10 +5,10 @@ from enum import Enum, unique as enum_unique_values
 from re import compile as re_compile
 from functools import wraps
 
-from pyt.utils.template.tokens import *
-from pyt.utils.template.scope import Scope
-from pyt.utils.text import deindent_str_block
-from pyt.protocols import IWriter
+from ghostwriter.utils.template.tokens import *
+from ghostwriter.utils.template.scope import Scope
+from ghostwriter.utils.text import deindent_str_block
+from ghostwriter.protocols import IWriter
 
 __all__ = ['Component', 'Scope', 'template', 'render']
 

@@ -23,14 +23,14 @@ __pycache__
 *.dll
 
 # cython - specific libraries
-pyt/parser/fileparser.c
-pyt/parser/*.html
+ghostwriter/parser/fileparser.c
+ghostwriter/parser/*.html
 
-pyt/utils/spec/*.c
-pyt/utils/spec/*html
+ghostwriter/utils/spec/*.c
+ghostwriter/utils/spec/*html
 
-pyt/utils/fhash/*.c
-pyt/utils/fhash/*html
+ghostwriter/utils/fhash/*.c
+ghostwriter/utils/fhash/*html
 
-pyt/utils/template/*.c
-pyt/utils/template/*.html
+ghostwriter/utils/template/*.c
+ghostwriter/utils/template/*.html

@@ -1,5 +1,5 @@
 import pytest
-from pyt.parser.tags import Tags
+from ghostwriter.parser.tags import Tags
 
 
 @pytest.mark.parametrize(

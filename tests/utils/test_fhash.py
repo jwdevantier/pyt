@@ -1,5 +1,5 @@
 import pytest
-from pyt.utils.fhash import file_hash
+from ghostwriter.utils.fhash import file_hash
 
 file1_contents = """\
 package org.example.acmecorp;

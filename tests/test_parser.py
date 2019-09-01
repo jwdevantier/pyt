@@ -1,5 +1,5 @@
-from pyt.parser import *
-from pyt.protocols import IWriter
+from ghostwriter.parser import *
+from ghostwriter.protocols import IWriter
 import pytest
 import filecmp
 

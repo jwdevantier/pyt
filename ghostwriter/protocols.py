@@ -1,4 +1,3 @@
-import typing as t
 from typing_extensions import Protocol
 
 

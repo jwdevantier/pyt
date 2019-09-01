@@ -1,5 +1,5 @@
 import pytest
-from pyt.utils.template.scope import *
+from ghostwriter.utils.template.scope import *
 
 
 def test_scope_init():

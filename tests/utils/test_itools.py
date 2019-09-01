@@ -1,4 +1,4 @@
-from pyt.utils import itools
+from ghostwriter.utils import itools
 
 
 def test_join():

@@ -1,4 +1,4 @@
-from pyt.writer.writer import Writer
+from ghostwriter.writer.writer import Writer
 from io import StringIO
 import yaml
 

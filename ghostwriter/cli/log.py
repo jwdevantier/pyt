@@ -1,5 +1,5 @@
 import logging
-from pyt.cli.conf import Configuration
+from ghostwriter.cli.conf import Configuration
 
 
 def configure_logging(conf: Configuration) -> None:

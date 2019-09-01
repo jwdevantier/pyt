@@ -3,9 +3,9 @@ import logging
 import sys
 from pathlib import Path
 import click
-from pyt.cli import conf
-from pyt.cli.log import configure_logging
-import pyt.cli.compile as cli_compile
+from ghostwriter.cli import conf
+from ghostwriter.cli.log import configure_logging
+import ghostwriter.cli.compile as cli_compile
 import colorama
 
 colorama.init()
@@ -25,7 +25,7 @@ def cli(ctx, project):
         level=logging.INFO,
         format='%(asctime)s: %(message)s',
         datefmt='%H:%M:%S')
-    log = logging.getLogger("pyt.start")
+    log = logging.getLogger("ghostwriter.start")
     log.info(f"Loading configuration from '{project}'")
 
     # We make the project directory our actual working directory.
@@ -38,7 +38,7 @@ def cli(ctx, project):
 
 
 @cli.command()
-@click.option('--watch/--no-watch', envvar="PYT_WATCH", default=False)
+@click.option('--watch/--no-watch', envvar="GHOSTWRITER_WATCH", default=False)
 @click.pass_obj
 def compile(config, watch):
     cli_compile.compile(config, watch)

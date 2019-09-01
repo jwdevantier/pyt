@@ -75,10 +75,10 @@ cdef str tmp_file(str path, str suffix):
     return fname
 
 
-class PytError(Exception):
+class GhostwriterError(Exception):
     pass
 
-class PytSnippetError(PytError):
+class GhostwriterSnippetError(GhostwriterError):
     def __init__(self,
                  snippet_name: str,
                  line_num: int,
@@ -250,12 +250,12 @@ cdef class FileWriter:
             wchar_t *s_ptr = s
             int ret = file_write(self.out, self.encoder, s_ptr, len(s))
         if ret:
-            raise PytError("failed to write to file")
+            raise GhostwriterError("failed to write to file")
         self.got_newline = s.endswith('\n')
 
     def __dealloc__(self):
         if fflush(self.out) != 0:
-            raise PytError("failed to flush output - file may miss contents")
+            raise GhostwriterError("failed to flush output - file may miss contents")
 
     def __repr__(self):
         return f"<FileWriter out: {'open' if self.out != NULL else 'null'}>"
@@ -332,7 +332,7 @@ cdef class Parser:
             self,
             tag_open: str = '<@@', tag_close: str = '@@>',
             *,
-            temp_file_suffix: str = '.pyt.tmp',
+            temp_file_suffix: str = '.gw.tmp',
             object should_replace_file,
             size_t buf_len_line = BUF_LINE_LEN,
             size_t buf_snippet_name_len = BUF_SNIPPET_NAME_LEN,
@@ -573,7 +573,7 @@ cdef class Parser:
             (<object> ctx.on_snippet)(ctx, snippet, prefix, fw)
         except Exception as e:
             reason = "error parsing snippet"
-            raise PytSnippetError(
+            raise GhostwriterSnippetError(
                 snippet, self.line_num, ctx,
                 reason=reason
             ) from e
@@ -641,8 +641,7 @@ cdef class Parser:
             return parse_result
         finally:
             if fflush(self.fh_out) != 0:
-                print("pyterror - flushing failed")
-                raise PytError("flushing output failed!")
+                raise GhostwriterError("flushing output failed!")
             if self.fh_out != NULL:
                 fclose(self.fh_out)
                 self.fh_out = NULL

@@ -5,7 +5,6 @@
 # Clojure Spec Guide
 # https://clojure.org/guides/spec
 
-# file:///home/pseud/repos/codegen/pyt/pyt/utils/spec.html
 import typing as t
 
 cdef class Spec:

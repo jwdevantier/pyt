@@ -1,7 +1,7 @@
 # cython: language_level=3
 from libc.stdio cimport FILE
 import typing as t
-from pyt.protocols import IWriter
+from ghostwriter.protocols import IWriter
 
 ctypedef Py_UNICODE wchar_t
 

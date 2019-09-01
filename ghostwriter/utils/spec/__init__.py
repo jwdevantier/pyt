@@ -22,7 +22,7 @@ from .spec import (
 # renaming exports
 # makes the API more intuitive by naming specs similar to python types
 # handle exports here because it may interfere with other python code
-from pyt.utils.spec import spec as s
+from ghostwriter.utils.spec import spec as s
 int = s.Int()
 float = s.Float()
 str = s.Str()

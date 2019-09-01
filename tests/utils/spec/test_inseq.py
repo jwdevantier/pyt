@@ -1,7 +1,7 @@
 import typing as t
 
 import pytest
-from pyt.utils import spec as s
+from ghostwriter.utils import spec as s
 
 
 ################################################################################
