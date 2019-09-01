@@ -3,13 +3,14 @@ import typing as t
 from abc import ABC, abstractmethod
 from enum import Enum, unique as enum_unique_values
 from re import compile as re_compile
+from functools import wraps
 
 from pyt.utils.template.tokens import *
 from pyt.utils.template.scope import Scope
 from pyt.utils.text import deindent_str_block
 from pyt.protocols import IWriter
 
-__all__ = ['render', 'Component', 'Scope']
+__all__ = ['Component', 'Scope', 'template', 'render']
 
 Element = t.Union[str,]
 Blocks = t.Dict[str, t.Callable[['EvalContext', 'TokenIterator', Scope], None]]
@@ -51,6 +52,16 @@ _cline = re_compile(r"^(?P<prefix>\s*)%\s*(?P<kw>[^%[^\s]+)\s*(?P<rest>[^%].+)?"
 
 
 def token_stream(text: str):
+    """Initialize lazy tokenizer on DSL code `text`.
+
+    Parameters
+    ----------
+    text
+
+    Returns
+    -------
+
+    """
     # rewritten to have a 'lead-in' phase where leading newlines is ignored.
     lines = (line for line in text.split('\n'))
     lead_in = True
@@ -94,6 +105,7 @@ def _eval_exprs(expr: str, scope: Scope):
 
 
 class TokenIterator:
+    """Implement standard peek(current)/next and a backtrack (revert) of 1."""
     __slots__ = ['tokens', '_next', '_current']
 
     def __init__(self, tokens: t.Iterator):
@@ -156,34 +168,29 @@ class EvalContext:
             components={**self.components, **(with_components or {})})
 
 
-# one method for prepping props
-# optional hooks for specs
-# TODO: do I *HAVE* to rely on people implementing _scope_ ?
 class Component(ABC):
-    # TODO: wrap this up in a function to have
+    """
+    The basic template component interface.
+
+    This class defines the interface to implement for new components.
+    Note that parsing components is moved to an external function in order
+    to avoid accidentally overriding this logic.
+    """
+
     @property
     @abstractmethod
     def template(self) -> str:
-        pass
-
-    def props(self, props: Scope) -> None:
         """
-        Hook for manipulating props.
-
-        Parameters
-        ----------
-        props
-            arguments given to this component from the calling context.
+        Return the DSL content defining the component.
 
         Returns
         -------
-            None - the props object itself is modified as needed.
+            A string containing the DSL template making up this component.
         """
         pass
 
 
 def flush_buffer(ctx: EvalContext):
-    # flush buffer
     if ctx.buffer[0][0:len(ctx.writer.prefix)] == ctx.writer.prefix:
         ctx.buffer[0] = ctx.buffer[0][len(ctx.writer.prefix):]
     ctx.writer.writeln("".join(ctx.buffer))
@@ -296,20 +303,72 @@ def dsl_eval_for(ctx: EvalContext, tokens: TokenIterator, scope: Scope, for_args
         dsl_eval_main(ctx, TokenIterator(iter(for_tokens)), Scope(loop_bindings, outer=scope))
 
 
-def skip_tokens(tokens: TokenIterator, stop):
+def skip_tokens(tokens: TokenIterator, stop: t.Callable[[Token], bool]):
+    """
+    Skip/consume tokens from supplied token stream until some token satisfies
+    the predicate function `stop`.
+
+    Parameters
+    ----------
+    tokens
+        A stream of tokens from parsing the DSL code.
+    stop
+        A predicate function taking a token and returning a truthy value if
+        further consumption of the token stream should be aborted.
+
+    Returns
+    -------
+        None
+    """
     for token in tokens:
         if stop(token):
             break
 
 
-def stop_at_ctrl_tokens(tokens: t.Set[str]):
+def stop_at_ctrl_tokens(ctrl_keywords: t.Set[str]):
+    """
+    Yield function returning True iff. token is a CtrlToken of a matching keyword
+
+    Helper function used to quickly generate a stop-function to limit how far e.g.
+    `dsl_eval_main` should proceed along the token stream.
+
+    Parameters
+    ----------
+    ctrl_keywords
+        a set/list of keywords to match against the supplied token.
+
+    Returns
+    -------
+        A predicate function returning True iff. supplied token is a control
+        token and its keyword matches and of those in `ctrl_keywords`.
+    """
     def stopfn(token):
-        return isinstance(token, CtrlToken) and token.keyword in tokens
+        return isinstance(token, CtrlToken) and token.keyword in ctrl_keywords
 
     return stopfn
 
 
-def dsl_eval_if(ctx: EvalContext, tokens: TokenIterator, scope: Scope, cond_expr: str):
+def dsl_eval_if(ctx: EvalContext, tokens: TokenIterator, scope: Scope, cond_expr: str) -> None:
+    """
+    Evaluate '%if' blocks (and any '%elif' or '%else').
+
+    Parameters
+    ----------
+    ctx
+        The evaluation context
+    tokens
+        The stream of tokens for the DSL parsed
+    scope
+        The current evaluation scope
+    cond_expr
+        The initial conditional expression.
+        Follows '%if' - the expression determining if the primary
+        if-block's body is evaluated.
+
+    Returns
+    -------
+        None
+    """
     kw = 'if'
     accepted_tags = {'elif', 'else', '/if'}
     while True:
@@ -351,9 +410,6 @@ def gen_loop_iterator(for_src, env: t.Mapping):
     INPUT: for lbl, val in nodetypes
     =>
     OUTPUT: ({'lbl': lbl, 'val': val} for lbl, val in nodetypes)
-
-
-
     """
     bindings, iterable = (x.strip() for x in for_src.split(' in '))
     bindings_lst = (
@@ -369,6 +425,18 @@ def py_eval(env: t.Mapping, prog: str) -> t.Mapping:
     eval_locals = {}
     exec(prog, dict(env), eval_locals)
     return eval_locals
+
+
+def template(components: t.Optional[Components] = None, blocks: t.Optional[Blocks] = None):
+    def wrapper(fn: t.Callable[[Scope], str]):
+        @wraps(fn)
+        def decorator(ctx, prefix: str, fw: IWriter):
+            scope = Scope()
+            render(fw, fn(scope), scope, components=components, blocks=blocks, prefix=prefix)
+
+        return decorator
+
+    return wrapper
 
 
 def render(buf: IWriter, prog: str, scope: Scope,
