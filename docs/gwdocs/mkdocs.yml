@@ -1,0 +1,17 @@
+site_name: Ghostwriter Docs
+theme:
+  name: 'material'
+markdown_extensions:
+- codehilite
+nav:
+  - 'index.md'
+  - 'overview.md'
+  - 'why.md'
+  - 'design_choices.md'
+  - Manual:
+    # - 'user_overview.md'
+    - 'configuration.md'
+    - 'snippets.md'
+    - 'template_dsl.md'
+    - 'writer.md'
+    # - 'specs.md'
