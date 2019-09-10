@@ -7,7 +7,7 @@ from ghostwriter.utils.template.dsl import (
 )
 from io import StringIO
 import typing as t
-from pyt.utils.text import deindent_str_block
+from ghostwriter.utils.text import deindent_str_block
 
 
 # TODO: consider omitting the trailing newline - can be expressed in the template if needed(?)
