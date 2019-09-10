@@ -1,8 +1,9 @@
 from ghostwriter.parser import *
 from ghostwriter.protocols import IWriter
+from ghostwriter.cli.compile import parse_snippet_name
+
 import pytest
 import filecmp
-
 
 # TODO test:
 #  test expansion where contents change (ensures we aren't copy-pasting all input)
@@ -273,3 +274,15 @@ def test_write_inplace_errs(tmpfile, contents):
         actual_contents = fh.read()
     print(f"out: {input_fname}")
     assert contents == actual_contents, "parsing failed"
+
+
+@pytest.mark.parametrize("snippet_fqn, module, fn", [
+    ("snippet", "<none>", "snippet"),
+    ("module.snippet", "module", "snippet"),
+    ("package.module.snippet", "package.module", "snippet"),
+    ("package.module.snippet ", "package.module", "snippet"),
+    (" package.module.snippet", "package.module", "snippet")
+])
+def test_parse_snippet_name(snippet_fqn, module, fn):
+    act_module, act_fn = parse_snippet_name(snippet_fqn)
+    assert act_module == module and act_fn == fn, "parsing snippet name failed"
