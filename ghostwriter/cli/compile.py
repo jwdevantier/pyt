@@ -36,7 +36,7 @@ def compiler_input_files(w: Watcher, path: str) -> t.Iterator[os.DirEntry]:
 
 
 def parse_snippet_name(snippet_fqn: str) -> t.Tuple[str, str]:
-    parts = snippet_fqn.split('.')
+    parts = snippet_fqn.strip().split('.')
     if len(parts) == 1:
         return "<none>", parts[0]
     else:
