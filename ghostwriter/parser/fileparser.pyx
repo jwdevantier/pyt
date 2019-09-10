@@ -333,7 +333,7 @@ cdef class Parser:
             tag_open: str = '<@@', tag_close: str = '@@>',
             *,
             temp_file_suffix: str = '.gw.tmp',
-            object should_replace_file,
+            object should_replace_file = lambda src, dst: True,
             size_t buf_len_line = BUF_LINE_LEN,
             size_t buf_snippet_name_len = BUF_SNIPPET_NAME_LEN,
             size_t buf_indent_by_len = BUF_INDENT_BY_LEN):
@@ -648,7 +648,9 @@ cdef class Parser:
             if self.fh_in != NULL:
                 fclose(self.fh_in)
                 self.fh_in = NULL
-            if fname_dst is None and parse_result == PARSE_OK and self.should_replace_file(self.tmp_file_path.ptr, fname_src):
-                os_replace(self.tmp_file_path.ptr, fname_src)
-            else:
-                os_remove(self.tmp_file_path.ptr)
+            if fname_dst is None:
+                # .. then we have a temporary file to handle
+                if parse_result == PARSE_OK and self.should_replace_file(self.tmp_file_path.ptr, fname_src):
+                    os_replace(self.tmp_file_path.ptr, fname_src)
+                else:
+                    os_remove(self.tmp_file_path.ptr)
