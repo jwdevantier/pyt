@@ -120,6 +120,8 @@ def foo():
     hello from snippet 2
     #<@@/snippet2@@>"""
 
+# TODO: unopened snippet to EOF
+
 SNIPPETS = {}
 
 
@@ -158,7 +160,7 @@ def multiline_snippet(ctx: Context, prefix: str, out: IWriter):
 
 
 def expand_snippet(ctx: Context, snippet: str, prefix: str, out: IWriter):
-    print("EXPAND")
+    print(f"expanding snippet '{snippet}'...")
     SNIPPETS[snippet](ctx, prefix, out)
 
 
