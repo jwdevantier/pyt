@@ -191,11 +191,12 @@ def test_write_otherfile_ok(tmpfile, mode, contents):
         output_fname = actual.name
 
     parser = Parser('<@@', '@@>')
-    parser.parse(
+    parse_res = parser.parse(
         expand_snippet,
         input_fname,
         output_fname)
     print(f"'{input_fname}' => '{output_fname}'")
+    assert parse_res == PARSE_OK, "expected a successful parse"
     assert filecmp.cmp(input_fname, output_fname, shallow=False)
 
 
