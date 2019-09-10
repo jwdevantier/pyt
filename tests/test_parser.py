@@ -176,7 +176,7 @@ def expand_snippet(ctx: Context, snippet: str, prefix: str, out: IWriter):
     ("utf8", prog_multiple_inline_writes),
     ("utf8", prog_multiline_snippet),
 ])
-def test_file_parsing(tmpfile, mode, contents):
+def test_write_otherfile_ok(tmpfile, mode, contents):
     """
     Test that the parser can process some input file and, provided it has no
     snippets or those snippets have already been expanded, write out the exact
@@ -203,7 +203,7 @@ def test_file_parsing(tmpfile, mode, contents):
     (prog_err_expected_close, PARSE_EXPECTED_SNIPPET_CLOSE),
     (prog_err_mismatched_snippets, PARSE_SNIPPET_NAMES_MISMATCH),
 ])
-def test_file_parsing_errs(tmpfile, contents, errcode):
+def test_write_otherfile_errs(tmpfile, contents, errcode):
     """
     Test that the parser correctly identifies and flag errors pertaining to the
     wrong use of snippet tags. Such as encountering a close snippet before an
@@ -257,7 +257,7 @@ def test_write_inplace_ok(tmpfile, contents):
     prog_err_expected_close,
     prog_err_mismatched_snippets,
 ])
-def test_write_inplace_ok(tmpfile, contents):
+def test_write_inplace_errs(tmpfile, contents):
     with tmpfile("w", encoding="utf8") as input_contents:
         input_contents.write(contents)
         input_contents.flush()
