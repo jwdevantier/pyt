@@ -236,7 +236,7 @@ def test_toks_prog_for_simple_once():
 ])
 def test_dsl_eval_progs(label, prog, scope_vars, result):
     buf = StringIO()
-    ctx = EvalContext(LineWriter(buf), blocks={}, components={})
+    ctx = EvalContext(LineWriter(buf), blocks={})
     tokens = TokenIterator(token_stream(prog))
     scope = Scope(scope_vars)
     dsl_eval_main(ctx, tokens, scope)

@@ -15,7 +15,7 @@ from ghostwriter.utils.text import deindent_str_block
 
 def render_prog(prog: str, scope_vars: t.Optional[t.Dict[str, t.Any]] = None) -> str:
     buf = StringIO()
-    ctx = EvalContext(LineWriter(buf), blocks={}, components={})
+    ctx = EvalContext(LineWriter(buf), blocks={})
     tokens = TokenIterator(token_stream(prog))
     scope = Scope(scope_vars or {})
     dsl_eval_main(ctx, tokens, scope)

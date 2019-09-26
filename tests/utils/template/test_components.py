@@ -4,19 +4,20 @@ from ghostwriter.utils.template.dsl import (
     token_stream, TokenIterator,
     LineWriter, EvalContext, dsl_eval_main
 )
+from ghostwriter.protocols import IWriter
+
 from io import StringIO
 import typing as t
 
 
 # TODO: need to rewrite helper here - must pass args, so let's refactor to
 #       take in a program instead of just a component name.
-def component_test(prog: str, blocks=None, components=None, scope=None) -> str:
+def component_test(prog: str, blocks=None, scope=None) -> str:
     buf = StringIO()
 
     ctx = EvalContext(
         LineWriter(buf),
-        blocks=blocks or {},
-        components=components or {})
+        blocks=blocks or {})
     tokens = TokenIterator(token_stream(prog))
 
     dsl_eval_main(ctx, tokens, Scope(scope or {}))
@@ -31,10 +32,10 @@ class Outer(Component):
     @property
     def template(self) -> str:
         return """
-    % MyFN self.fn_name, self.fn_args
+    % r MyFN(self.fn_name, self.fn_args)
     print("hello, world")
     print("more...")
-    % /MyFN
+    % /r
     print("done")"""
 
 
@@ -53,18 +54,18 @@ class MyFN(Component):
 
 
 def test_c1():
-    components = {
-        'MyFN': MyFN,
-        'Outer': Outer
-    }
     scope = {
         'name': 'foo',
-        'args': ['one', 'two', 'three']
+        'args': ['one', 'two', 'three'],
+        # 'MyFN': MyFN, # -- will be in scope when calling 'Outer'
+        'Outer': Outer
     }
     prog = """\
-%Outer name, args
-%/Outer"""
-    actual = component_test(prog, components=components, scope=scope)
+%r Outer(name, args)
+%/r"""
+    print("Component: '", getattr(MyFN, '__ghostwriter_component__', 'NOPE'),  "'")
+    print("Component Scope: '", getattr(MyFN, '__ghostwriter_component_scope__', 'NOPE'), "'")
+    actual = component_test(prog, scope=scope)
     expected = """\
 def foo(one, two, three):
     print("foo invoked")
@@ -113,10 +114,8 @@ class PyClass(Component):
 
 
 def test_pyclass_component():
-    components = {
-        'Class': PyClass
-    }
     scope = {
+        'Class': PyClass,
         'name': 'CtrlToken',
         'args': {
             'prefix': '""',
@@ -125,9 +124,9 @@ def test_pyclass_component():
         'parents': ['Token']
     }
     prog = """\
-%Class name=name, args=args, parents=parents
-%/Class"""
-    actual = component_test(prog, components=components, scope=scope)
+%r Class(name=name, args=args, parents=parents)
+%/r"""
+    actual = component_test(prog, scope=scope)
     expected = """\
 class CtrlToken(Token):
     def __init__(prefix="", token=TokenNone):

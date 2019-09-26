@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from enum import Enum, unique as enum_unique_values
 from re import compile as re_compile
 from functools import wraps
+import inspect
 
 from ghostwriter.utils.template.tokens import *
 from ghostwriter.utils.template.scope import Scope
@@ -136,18 +137,16 @@ class TokenIterator:
 
 
 class EvalContext:
-    __slots__ = ['blocks', 'components', 'buffer', 'buffer_append', 'writer']
+    __slots__ = ['blocks', 'buffer', 'buffer_append', 'writer']
 
-    def __init__(self, writer: LineWriter, *, blocks: Blocks = None, components: Components = None):
+    def __init__(self, writer: LineWriter, *, blocks: Blocks = None):
         self.blocks = blocks or {}
-        self.components = components or {}
         self.buffer = []
         self.buffer_append: t.Callable[[object], None] = self.buffer.append
         self.writer = writer
 
     def derived(self,
-                with_blocks: t.Optional[Blocks] = None,
-                with_components: t.Optional[Components] = None) -> 'EvalContext':
+                with_blocks: t.Optional[Blocks] = None) -> 'EvalContext':
         """Make new EvalContext sharing the same blocks and handlers as this one.
 
         Returns
@@ -162,13 +161,40 @@ class EvalContext:
             }
         else:
             blocks = {k: v for k, v in self.blocks.items() if k != 'body'}
-        return EvalContext(
-            self.writer,
-            blocks=blocks,
-            components={**self.components, **(with_components or {})})
+        return EvalContext(self.writer, blocks=blocks)
 
 
-class Component(ABC):
+class ComponentMeta(type):
+    def __new__(mcs, clsname, bases, clsdict):
+        if '__init__' in clsdict:
+            orig_init = clsdict['__init__']
+            @wraps(orig_init)
+            def init_wrapper(self, *args, **kwargs):
+                """
+                Compute scope for component before invoking normal init.
+                """
+                # install old init to prevent re-running this multiple times
+                setattr(type(self), '__init__', orig_init)
+
+                # compute scope
+                setattr(type(self), '__ghostwriter_component_scope__', {
+                    ident: obj
+                    for ident, obj
+                    in inspect.getmembers(inspect.getmodule(self))
+                    if (
+                        inspect.ismodule(obj)
+                        or getattr(obj, '__ghostwriter_component__', False)
+                    )
+                })
+                # call actual init function
+                orig_init(self, *args, **kwargs)
+
+            clsdict['__init__'] = init_wrapper
+        typ = super().__new__(mcs, clsname, bases, clsdict)
+        return typ
+
+
+class Component(metaclass=ComponentMeta):
     """
     The basic template component interface.
 
@@ -176,9 +202,12 @@ class Component(ABC):
     Note that parsing components is moved to an external function in order
     to avoid accidentally overriding this logic.
     """
+    # Important to set here - cannot infer which types are components
+    # in metaclass code otherwise (timing issue, attr may not yet have been set)
+    __ghostwriter_component__ = True
+    # Will be overwritten by one-time init function
+    __ghostwriter_component_scope__ = {}
 
-    @property
-    @abstractmethod
     def template(self) -> str:
         """
         Return the DSL content defining the component.
@@ -187,7 +216,7 @@ class Component(ABC):
         -------
             A string containing the DSL template making up this component.
         """
-        pass
+        raise RuntimeError("'template() -> str' method not implemented")
 
 
 def flush_buffer(ctx: EvalContext):
@@ -219,23 +248,20 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
                 flush_buffer(ctx)
 
             ctx.writer.indent(token.prefix)
-            if token.keyword == 'for':
+            if token.keyword == 'r':
+                # Supports initializing component instances
+                # 'r MyComponent(one, two, three='wee')
+                # ... and expressions evaluating to a component instance
+                # 'r self.somevar['key'](one, two, three='wee')
+                component = py_eval(scope, f"_it = {token.args}")['_it']
+                dsl_eval_component(ctx, tokens, scope, component)
+                ctx.writer.dedent()
+            elif token.keyword == 'for':
                 dsl_eval_for(ctx, tokens, scope, token.args)
                 ctx.writer.dedent()
             elif token.keyword == 'if':
                 dsl_eval_if(ctx, tokens, scope, token.args)
                 ctx.writer.dedent()
-            elif token.keyword[0].isupper():
-                component_class = ctx.components.get(token.keyword)
-                if not component_class:
-                    raise RuntimeError(f"Unknown component '{token.keyword}'")
-
-                component = py_eval(
-                    Scope({token.keyword: component_class}, scope),
-                    f"_it = {token.keyword}({token.args if token.args else ''})")['_it']
-                dsl_eval_component(ctx, tokens, scope, component, token.keyword)
-                ctx.writer.dedent()
-
             elif not token.keyword.startswith('/'):  # must be a block
                 block = ctx.blocks.get(token.keyword)
                 if not block:
@@ -249,48 +275,39 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
 
 def dsl_eval_component(
         ctx: EvalContext, tokens: TokenIterator, scope: Scope,
-        component: Component, name: str):
-    # Need to
-    # * eval the 'body' of the component (the DSL contained within
-    #   the start and end component block) in the context of the
-    #   component parent.
-    #
-    #   => Ensures bindings & components aren't redefined or missing
-    #
-    # * consume the tokens of the body right away, store in a list
-    #   => Ensures body can be rendered multiple times
-    #
-    # * Initialise component - take component args and turn
-    #   % Foo one, two='three'
-    #   into:
-    #   Foo(one, two='three')
-    #
-    #   => Enables full Python exprs
-    #   => Ensures DSL is close to vanilla Python
-    #
-    # * bind 'self' to the component instance
+        component: Component):
+    # derive env now - means child envs and this one branch.
+    # => body is rendered with no regard to env changes made later on
     body_ctx = ctx.derived()
+    # Must consume the tokens making up the body of the component
+    # => whether rendering the body or not, the tokens are used.
     body_tokens = []
+    nesting_lvl = 1
     for tok in tokens:
-        if isinstance(tok, CtrlToken) and tok.keyword == f"/{name}":
-            break
+        if isinstance(tok, CtrlToken):
+            if tok.keyword == 'r':
+                nesting_lvl += 1
+            elif tok.keyword == '/r':
+                nesting_lvl -=1
+                if nesting_lvl == 0:
+                    break
+        # existing code skips its own closing block too
         body_tokens.append(tok)
 
-    def render_body(_: EvalContext, __: TokenIterator, ___: Scope, args: str):
+    def render_body(_, __, ___, args: str):
         if args:
             raise RuntimeError("body block cannot take arguments")
-
-        dsl_eval_main(
-            body_ctx, TokenIterator(iter(body_tokens)), Scope(outer=scope),
-            stop_at_ctrl_tokens({f'/{name}'}))
+        dsl_eval_main(body_ctx,
+                      TokenIterator(iter(body_tokens)),
+                      Scope(outer=scope))
 
     component_ctx = ctx.derived(with_blocks={'body': render_body})
-    # Render the component itself
-    # (note: we are now supplying an almost empty scope, only explicitly passed
-    # (arguments are carried into the context of the "called" component.)
-    dsl_eval_main(component_ctx, TokenIterator(token_stream(
-        deindent_str_block(component.template, ltrim=True))),
-                  Scope({'self': component}))
+    # bind 'self' to the component instance
+    dsl_eval_main(component_ctx,
+                  TokenIterator(token_stream(deindent_str_block(
+                      component.template, ltrim=True))),
+                  Scope({'self': component},
+                        Scope(component.__ghostwriter_component_scope__)))
 
 
 def dsl_eval_for(ctx: EvalContext, tokens: TokenIterator, scope: Scope, for_args: str):
@@ -342,7 +359,7 @@ def stop_at_ctrl_tokens(ctrl_keywords: t.Set[str]):
         A predicate function returning True iff. supplied token is a control
         token and its keyword matches and of those in `ctrl_keywords`.
     """
-    def stopfn(token):
+    def stopfn(token: Token):
         return isinstance(token, CtrlToken) and token.keyword in ctrl_keywords
 
     return stopfn
@@ -427,12 +444,13 @@ def py_eval(env: t.Mapping, prog: str) -> t.Mapping:
     return eval_locals
 
 
-def template(components: t.Optional[Components] = None, blocks: t.Optional[Blocks] = None):
+def template(scope: t.Optional[t.Mapping[str, t.Any]] = None, blocks: t.Optional[Blocks] = None):
     def wrapper(fn: t.Callable[[Scope], str]):
         @wraps(fn)
-        def decorator(ctx, prefix: str, fw: IWriter):
-            scope = Scope()
-            render(fw, fn(scope), scope, components=components, blocks=blocks, prefix=prefix)
+        def decorator(_, prefix: str, fw: IWriter):
+            nonlocal scope
+            scope = Scope(scope or {})
+            render(fw, fn(scope), scope, blocks=blocks, prefix=prefix)
 
         return decorator
 
@@ -441,12 +459,10 @@ def template(components: t.Optional[Components] = None, blocks: t.Optional[Block
 
 def render(buf: IWriter, prog: str, scope: Scope,
            blocks: t.Optional[Blocks] = None,
-           components: t.Optional[Components] = None,
            prefix: str = ''):
     ctx = EvalContext(
         LineWriter(buf, prefix),
-        blocks=blocks or {},
-        components=components or {})
+        blocks=blocks or {})
     tokens = TokenIterator(token_stream(deindent_str_block(prog, ltrim=True)))
 
     dsl_eval_main(ctx, tokens, scope)
