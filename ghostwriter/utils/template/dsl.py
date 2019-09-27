@@ -216,7 +216,7 @@ class Component(metaclass=ComponentMeta):
         -------
             A string containing the DSL template making up this component.
         """
-        raise RuntimeError("'template() -> str' method not implemented")
+        raise NotImplementedError("'template() -> str' method not implemented")
 
 
 def flush_buffer(ctx: EvalContext):
