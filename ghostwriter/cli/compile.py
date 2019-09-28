@@ -76,6 +76,16 @@ class SnippetModuleNotFoundError(SnippetError):
             f"module '{mod}' not found - maybe you have a typo or not all search paths have been added")
 
 
+class SnippetModuleDependencyNotFoundError(SnippetError):
+    def __init__(self, snippet_fqn: str, err: ModuleNotFoundError):
+        mod, _ = parse_snippet_name(snippet_fqn)
+        self.search_paths = sys.path
+        super().__init__(
+            snippet_fqn,
+            f"Error importing module '{mod}': {str(err)}"
+        )
+
+
 class SnippetNotFoundError(SnippetError):
     def __init__(self, snippet_fqn: str):
         mod, fn_name = parse_snippet_name(snippet_fqn)
@@ -106,7 +116,11 @@ def expand_snippet(ctx: Context, snippet: str, prefix: str, out: IWriter):
     try:
         mod = import_module(mod_name)
     except ModuleNotFoundError as e:
-        raise SnippetModuleNotFoundError(snippet) from e
+        if str(e) == f"No module named '{mod_name}'":
+            raise SnippetModuleNotFoundError(snippet) from e
+        # some dependency could not be located
+        raise SnippetModuleDependencyNotFoundError(snippet, e)
+
     try:
         snippet_fn = getattr(mod, fn_name)
     except AttributeError as e:
