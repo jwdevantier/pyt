@@ -10,11 +10,12 @@ from ghostwriter.utils.template.scope import Scope
 from ghostwriter.utils.text import deindent_str_block
 from ghostwriter.protocols import IWriter
 
-__all__ = ['Component', 'Scope', 'template', 'render']
+__all__ = ['Component', 'Scope', 'snippet']
 
 Element = t.Union[str,]
 Blocks = t.Dict[str, t.Callable[['EvalContext', 'TokenIterator', Scope], None]]
 Components = t.Dict[str, t.Type['Component']]
+ScopeLike = t.Mapping[str, t.Any]
 
 
 # TODO: issue - %% lines aren't rewritten
@@ -443,25 +444,43 @@ def py_eval(env: t.Mapping, prog: str) -> t.Mapping:
     return eval_locals
 
 
-def template(scope: t.Optional[t.Mapping[str, t.Any]] = None, blocks: t.Optional[Blocks] = None):
-    def wrapper(fn: t.Callable[[Scope], str]):
+def snippet(blocks: t.Optional[Blocks] = None):
+    """
+    Create snippet from Component instance.
+
+    Convenience decorator - wrap a function which takes a Scope instance and
+    which returns a Component instance.
+
+    Parameters
+    ----------
+    blocks:
+        (Optional) additional blocks to use in DSL.
+
+    Example
+    -------
+    @snippet()
+    def my_snippet():
+        foo = 'foo string'
+        identity = lambda x: x
+        return MyComponent(foo, identity)
+
+    Returns
+    -------
+        A snippet function
+    """
+    def wrapper(fn: t.Callable[[], Component]):
         @wraps(fn)
         def decorator(_, prefix: str, fw: IWriter):
-            nonlocal scope
-            scope = Scope(scope or {})
-            render(fw, fn(scope), scope, blocks=blocks, prefix=prefix)
-
+            scope = Scope({})
+            component: Component = fn()
+            if not isinstance(component, Component):
+                raise ValueError(f"snippet must return a Component instance, got '{type(component)}'")
+            scope['__main__'] = component
+            prog = """\
+            % r __main__
+            % /r"""
+            ctx = EvalContext(LineWriter(fw, prefix), blocks=blocks)
+            tokens = TokenIterator(token_stream(deindent_str_block(prog, ltrim=True)))
+            dsl_eval_main(ctx, tokens, scope)
         return decorator
-
     return wrapper
-
-
-def render(buf: IWriter, prog: str, scope: Scope,
-           blocks: t.Optional[Blocks] = None,
-           prefix: str = ''):
-    ctx = EvalContext(
-        LineWriter(buf, prefix),
-        blocks=blocks or {})
-    tokens = TokenIterator(token_stream(deindent_str_block(prog, ltrim=True)))
-
-    dsl_eval_main(ctx, tokens, scope)
