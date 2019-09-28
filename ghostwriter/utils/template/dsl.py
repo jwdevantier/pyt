@@ -1,6 +1,5 @@
 import typing as t
 
-from abc import ABC, abstractmethod
 from enum import Enum, unique as enum_unique_values
 from re import compile as re_compile
 from functools import wraps
