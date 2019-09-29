@@ -43,7 +43,7 @@ def test_advanced():
         customer_id: char
         date_of_purchase: datetime
     """
-    model = yaml.load(model_yml)
+    model = yaml.safe_load(model_yml)
     packagename = "org.example.acmecorp"
 
     def pascal_case(n):
