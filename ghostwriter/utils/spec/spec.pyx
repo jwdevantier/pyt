@@ -1,7 +1,7 @@
 # cython: language_level=3
 import typing as t
 from copy import copy
-from collections import Sequence, Mapping
+from collections.abc import Sequence, Mapping
 
 # Inspiration: https://clojure.org/guides/spec
 # Like clojure spec, dicts etc are OPEN
