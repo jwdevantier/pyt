@@ -56,7 +56,7 @@ setup(
             "ghostwriter/parser/wcsenc.c"]),
         Extension("ghostwriter.utils.spec.spec", ["ghostwriter/utils/spec/spec.pyx"]),
         Extension("ghostwriter.utils.fhash.fhash", ["ghostwriter/utils/fhash/fhash.pyx"]),
-        Extension("ghostwriter.utils.template.tokens", ["ghostwriter/utils/template/tokens.pyx"])
+        Extension("ghostwriter.utils.template.tokens", ["ghostwriter/utils/template/tokens.pyx"]),
     ], annotate=True)
 
 )
