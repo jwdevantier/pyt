@@ -9,4 +9,4 @@ To avoid having to manually recompile files, Ghostwriter will monitor (watch) yo
 The code used for code-generation is organized as a regular Python project. This means you can get full editor support, install community libraries with pip, write unit tests and so on. Ghostwriter simply leverages the excellent community of Python to enable you to draw data from yaml, databases or anything else which Python can speak to.
 
 Ghostwriter introduces 3 ways to generate code. The basic snippet abstraction lets your write characters, `print()`-style, directly into the file (bring your own newlines!). The [writer](writer.md) interface, which abstracts issues of indentation and supports editing in multiple places at the same time. The [template](template_dsl.md) language goes further still, offering a full, extensible templating language with [React-like](https://reactjs.org) components.
-Finally, you can of build your own code-generation method atop the basic snippet interface.
+Finally, you can of build your own code-generation method on top of the basic snippet interface.

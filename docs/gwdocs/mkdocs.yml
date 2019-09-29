@@ -4,10 +4,11 @@ theme:
 markdown_extensions:
 - codehilite
 nav:
-  - 'index.md'
-  - 'overview.md'
-  - 'why.md'
-  - 'design_choices.md'
+  - 'Introduction': 'index.md'
+  - 'How it works': 'overview.md'
+  #- 'Getting Started': 'getting_started.md'
+  - 'Why generate code?': 'why.md'
+  - 'Design Choices': 'design_choices.md'
   - Manual:
     # - 'user_overview.md'
     - 'configuration.md'

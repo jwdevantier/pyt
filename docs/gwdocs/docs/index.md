@@ -10,10 +10,10 @@ Ghostwriter is a tool which facilitates embedding sections of generated code amo
 
 * [Overview](overview.md)
     * Learn more about how Ghostwriter works at a high-level
-* [Why ?](why.md)
-    * Describes the motivation for using a code-generation tool
 * [Getting started](getting_started.md)
     * A quick tutorial showing how to get started with code-generation
+* [Why ?](why.md)
+    * Describes the motivation for using a code-generation tool
 * [User Guide](user_overview.md)
     * This section describes each part of Ghostwriter in more detail
 * 
