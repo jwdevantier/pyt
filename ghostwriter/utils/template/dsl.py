@@ -168,28 +168,32 @@ class ComponentMeta(type):
     def __new__(mcs, clsname, bases, clsdict):
         if '__init__' in clsdict:
             orig_init = clsdict['__init__']
-            @wraps(orig_init)
-            def init_wrapper(self, *args, **kwargs):
-                """
-                Compute scope for component before invoking normal init.
-                """
-                # install old init to prevent re-running this multiple times
-                setattr(type(self), '__init__', orig_init)
+        else:
+            def orig_init(self, *args, **kwargs):
+                pass
 
-                # compute scope
-                setattr(type(self), '__ghostwriter_component_scope__', {
-                    ident: obj
-                    for ident, obj
-                    in inspect.getmembers(inspect.getmodule(self))
-                    if (
-                        inspect.ismodule(obj)
-                        or getattr(obj, '__ghostwriter_component__', False)
-                    )
-                })
-                # call actual init function
-                orig_init(self, *args, **kwargs)
+        @wraps(orig_init)
+        def init_wrapper(self, *args, **kwargs):
+            """
+            Compute scope for component before invoking normal init.
+            """
+            # install old init to prevent re-running this multiple times
+            setattr(type(self), '__init__', orig_init)
 
-            clsdict['__init__'] = init_wrapper
+            # compute scope
+            setattr(type(self), '__ghostwriter_component_scope__', {
+                ident: obj
+                for ident, obj
+                in inspect.getmembers(inspect.getmodule(self))
+                if (
+                    inspect.ismodule(obj)
+                    or getattr(obj, '__ghostwriter_component__', False)
+                )
+            })
+            # call actual init function
+            orig_init(self, *args, **kwargs)
+
+        clsdict['__init__'] = init_wrapper
         typ = super().__new__(mcs, clsname, bases, clsdict)
         return typ
 
