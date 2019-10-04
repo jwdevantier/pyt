@@ -10,8 +10,6 @@ from ghostwriter.utils.template.scope import Scope
 from ghostwriter.utils.text import deindent_str_block
 from ghostwriter.protocols import IWriter
 
-__all__ = ['Component', 'Scope', 'snippet']
-
 Element = t.Union[str,]
 Blocks = t.Dict[str, t.Callable[['EvalContext', 'TokenIterator', Scope], None]]
 Components = t.Dict[str, t.Type['Component']]
@@ -21,6 +19,17 @@ ScopeLike = t.Mapping[str, t.Any]
 # TODO: issue - %% lines aren't rewritten
 # Do not go templite (compiled) approach, instead write an interpreted approach
 # (Django style, norvig lispy style)
+
+
+class DSLError(Exception):
+    pass
+
+
+class DSLBlockRenderExpressionError(DSLError):
+    def __init__(self, expr: str, result: t.Any):
+        super().__init__(f"error at 'r' block. '{expr}' did not yield a component - got type: '{type(result)}'")
+        self.expr = expr
+        self.result = result
 
 
 @enum_unique_values
@@ -185,11 +194,8 @@ class ComponentMeta(type):
                 ident: obj
                 for ident, obj
                 in inspect.getmembers(inspect.getmodule(self))
-                if (
-                    inspect.ismodule(obj)
-                    or getattr(obj, '__ghostwriter_component__', False)
-                )
-            })
+                if (inspect.ismodule(obj)
+                    or getattr(obj, '__ghostwriter_component__', False))})
             # call actual init function
             orig_init(self, *args, **kwargs)
 
@@ -258,6 +264,8 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
                 # ... and expressions evaluating to a component instance
                 # 'r self.somevar['key'](one, two, three='wee')
                 component = py_eval(scope, f"_it = {token.args}")['_it']
+                if not isinstance(component, Component):
+                    raise DSLBlockRenderExpressionError(token.args, component)
                 dsl_eval_component(ctx, tokens, scope, component)
                 ctx.writer.dedent()
             elif token.keyword == 'for':
@@ -292,7 +300,7 @@ def dsl_eval_component(
             if tok.keyword == 'r':
                 nesting_lvl += 1
             elif tok.keyword == '/r':
-                nesting_lvl -=1
+                nesting_lvl -= 1
                 if nesting_lvl == 0:
                     break
         # existing code skips its own closing block too
@@ -363,6 +371,7 @@ def stop_at_ctrl_tokens(ctrl_keywords: t.Set[str]):
         A predicate function returning True iff. supplied token is a control
         token and its keyword matches and of those in `ctrl_keywords`.
     """
+
     def stopfn(token: Token):
         return isinstance(token, CtrlToken) and token.keyword in ctrl_keywords
 
@@ -472,6 +481,7 @@ def snippet(blocks: t.Optional[Blocks] = None):
     -------
         A snippet function
     """
+
     def wrapper(fn: t.Callable[[], Component]):
         @wraps(fn)
         def decorator(_, prefix: str, fw: IWriter):
@@ -486,5 +496,7 @@ def snippet(blocks: t.Optional[Blocks] = None):
             ctx = EvalContext(LineWriter(fw, prefix), blocks=blocks)
             tokens = TokenIterator(token_stream(deindent_str_block(prog, ltrim=True)))
             dsl_eval_main(ctx, tokens, scope)
+
         return decorator
+
     return wrapper

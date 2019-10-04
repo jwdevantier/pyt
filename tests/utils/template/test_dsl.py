@@ -1,10 +1,11 @@
 import pytest
-from ghostwriter.utils.template.dsl import *
+from ghostwriter.utils.template import *
 from ghostwriter.utils.template.dsl import (
     token_stream, EvalContext, LineWriter, TokenIterator,
     dsl_eval_main)
 from ghostwriter.utils.template.tokens import *
 from io import StringIO
+
 
 # Do **NOT** process text snippets, let the user defining the snippet do so
 # (possibly even the component code)
