@@ -59,7 +59,6 @@ def test_component_resolution_same_file_err():
     assert 'DefinitelyNotExistingComponent' in str(exc_info.value)
 
 
-# TODO: not working yet.
 def test_component_resolution_different_file():
     """Ensure a component can automatically refer to components in another
     module."""
@@ -92,7 +91,6 @@ def test_attempt_render_non_component():
         pytest.fail("Expected an error")
 
 
-# TODO: test resolving component from other imported module
 def test_rendering_initalized_component_instance():
     """Test that a component can receive and render an already initialized
     component instance."""
