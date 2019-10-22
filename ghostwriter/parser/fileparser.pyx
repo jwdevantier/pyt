@@ -277,9 +277,8 @@ cdef class FileWriter:
 ## Context
 ################################################################################
 cdef class Context:
-    def __init__(self, cb: snippet_cb, src: str, dst: t.Optional[str]):
+    def __init__(self, cb: snippet_cb, src: str):
         self.src = src
-        self.dst = dst or ""
         self.env = {}
         self.on_snippet = <c_snippet_cb> cb
 
@@ -390,13 +389,14 @@ cdef class Parser:
         if self.snippet_indent == NULL:
             raise MemoryError("allocating snippet indentation prefix")
 
-    def reset(self, fpath_src: str, fpath_dst: t.Optional[str]):
+    def reset(self, fpath: str):
         # If overwriting the input file - generate a tempfile for output
         cstr_reset(self.tmp_file_path)
-        if not fpath_dst:
-            fpath_dst = tmp_file(fpath_src, self.temp_file_suffix)
-            if cstr_ncpy_unicode(self.tmp_file_path, fpath_dst, len(fpath_dst)) != 0:
-                raise MemoryError("failed to copy string to tmp_file_path")
+
+        # create temporary file in same directory
+        fpath_dst = tmp_file(fpath, self.temp_file_suffix)
+        if cstr_ncpy_unicode(self.tmp_file_path, fpath_dst, len(fpath_dst)) != 0:
+            raise MemoryError("failed to copy string to tmp_file_path")
 
         # Close input file if necessary
         if self.fh_in != NULL:
@@ -406,11 +406,11 @@ cdef class Parser:
         self.line_num = 0
 
         # Open input file
-        fpath_src_bs = fpath_src.encode('UTF-8')
-        fh_in_str = fpath_src_bs
+        fpath_bs = fpath.encode('UTF-8')
+        fh_in_str = fpath_bs
         self.fh_in = fopen(fh_in_str, FILE_READ)
         if self.fh_in == NULL:
-            raise FileNotFoundError(2, f"input file '{fpath_src}' not found")
+            raise FileNotFoundError(2, f"input file '{fpath}' not found")
 
         # Close output file if necessary
         if self.fh_out != NULL:
@@ -630,11 +630,11 @@ cdef class Parser:
                 break  # Done, go back to outer state
         return PARSE_OK
 
-    def parse(self, cb: snippet_cb, fname_src: str, fname_dst: t.Optional[str] = None) -> PARSE_RES:
+    def parse(self, cb: snippet_cb, fpath: str) -> PARSE_RES:
         cdef:
-            Context ctx = Context(cb, fname_src, fname_dst)
+            Context ctx = Context(cb, fpath)
             size_t parse_result = PARSE_EXCEPTION
-        self.reset(fname_src, fname_dst)
+        self.reset(fpath)
 
         try:
             parse_result = self.doparse(ctx)
@@ -648,9 +648,8 @@ cdef class Parser:
             if self.fh_in != NULL:
                 fclose(self.fh_in)
                 self.fh_in = NULL
-            if fname_dst is None:
-                # .. then we have a temporary file to handle
-                if parse_result == PARSE_OK and self.should_replace_file(self.tmp_file_path.ptr, fname_src):
-                    os_replace(self.tmp_file_path.ptr, fname_src)
-                else:
-                    os_remove(self.tmp_file_path.ptr)
+
+            if parse_result == PARSE_OK and self.should_replace_file(self.tmp_file_path.ptr, fpath):
+                os_replace(self.tmp_file_path.ptr, fpath)
+            else:
+                os_remove(self.tmp_file_path.ptr)

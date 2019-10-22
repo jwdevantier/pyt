@@ -10,6 +10,6 @@ sys.path.append(pl.Path(pl.Path(__file__).parent, 'shared').as_posix())
 def snippet_eval(snippet) -> str:
     buf = StringIO()
     # snippet(ctx:Context, prefix:str, writer: IWriter)
-    ctx = Context(None, "<no-src>", "<no-dest>")
+    ctx = Context(None, "<no-src>")
     snippet(ctx, "", buf)
     return buf.getvalue()

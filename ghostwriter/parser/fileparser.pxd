@@ -93,6 +93,5 @@ cdef class Parser:
 
 cdef class Context:
     cdef readonly wchar_t *src
-    cdef readonly wchar_t *dst
     cpdef readonly dict env
     cdef c_snippet_cb on_snippet
