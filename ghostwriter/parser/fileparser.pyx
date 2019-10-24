@@ -8,6 +8,7 @@ from os.path import dirname as os_path_dirname, basename as os_path_basename
 from os import replace as os_replace, remove as os_remove
 import typing as t
 import logging
+import colorama as clr
 
 log = logging.getLogger(__name__)
 
@@ -572,6 +573,7 @@ cdef class Parser:
         try:
             (<object> ctx.on_snippet)(ctx, snippet, prefix, fw)
         except Exception as e:
+            log.exception(f"{clr.Style.BRIGHT}{clr.Fore.RED}Fatal error expanding snippet '{clr.Fore.MAGENTA}{snippet}{clr.Fore.RED}'{clr.Style.RESET_ALL}")
             reason = "error parsing snippet"
             raise GhostwriterSnippetError(
                 snippet, self.line_num, ctx,
