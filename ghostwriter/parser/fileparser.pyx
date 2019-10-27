@@ -672,7 +672,7 @@ cdef class Parser:
                 self.fh_in = NULL
 
             if parse_result == PARSE_OK and self.should_replace_file(self.tmp_file_path.ptr, fpath):
-                os_replace(self.post_process(self.tmp_file_path.ptr, fpath))
+                os_replace(self.post_process(self.tmp_file_path.ptr), fpath)
             else:
                 os_remove(self.tmp_file_path.ptr)
         return parse_result
