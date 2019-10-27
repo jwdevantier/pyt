@@ -1,17 +1,33 @@
 # Why generate code ?
 In most projects, there is some unique work, and a lot of boilerplate code.
-Code-generation is excellent at reducing boilerplate code such as mapping objects to database tables, validating incoming data on REST interfaces, memory allocation and deallocation functions and so on.
+Code-generation is excellent at reducing boilerplate code such as mapping objects to database tables, validating incoming data, memory allocation and deallocation functions and so on.
 
-In general, programming languages often you to trade code-size for complexity. Terse code often requires leveraging the most advanced aspects of your programming language. But can you justify the complexity? For example, your Python-colleagues probably understand decorators, but can you justify using meta-classes, dynamically generated code and the descriptor protocol in your quest to avoid bloating the code-base ?
+## Write simpler code
+In general, programming languages often force you to trade code-size for complexity. Terse code often requires leveraging the most advanced aspects of your programming language. But can you justify the complexity? For example, your Python-colleagues probably understand decorators, but can you justify using meta-classes, dynamically generated code and the descriptor protocol in your quest to avoid bloating the code-base ?
 
-Increasingly, products also span multiple languages. Many projects has started as a prototype in PHP and ended up with tens or hundreds of micro-services in a myriad of languages. Also, some use-cases almost mandate a particular language, such as Javascript for the web or Python for machine-learning.
-In all these cases, standardizing on a code-generator can enable writing less code without leveraging the most esoteric aspects of a language, and it is almost required in cases where concerns cross language boundaries.
-Consider gRPC, an increasingly popular alternative to REST in microservices architectures. With gRPC, the interface boundary between server and client is expressed in an IDL (interface definition language) file from which server and client code is generated in any number of languages.
-
+## Decouple language and run-time
 Another interesting point is that code-generation can decouple the language from the run-time. Using code generation, you can write high-level Python, but generate low-level C code for performance reasons, or generate Go code to create compact, performant microservices.
+For an example of this approach, see [Outperforming everything with anything](https://wordsandbuttons.online/outperforming_everything_with_anything.html).
 
-Finally, yes, code-generation itself introduces some complexity, but consider that products are increasingly leveraging multiple languages. Whether because some languages are near-mandatory for some use-cases (Python for machine-learning, Javascript for the web), acquisitions or expertise across the organization, standardizing on just one language rarely happens.
-In this case, code-generation can both reduce the need to leverage each language's most advanced features for code-reuse and help generating consistent interfaces between the languages, as is the case with gRPC where IDL models generate interfaces in Go, Python, Java or something else.
+For Ghostwriter, I'm forcing you to use Python as that high-level, expressive language - but you are free to write your own code-generator ;)
+
+## Transcend language boundaries
+Code-generation is especially useful when concerns cross language boundaries. [gRPC](https://grpc.io/), for example, allows you to express a service's interface in IDL (interface definition language), which the gRPC code-generators read to generate those interfaces in a variety of programming languages.
+In this way, the DRY principle is achieved by letting the IDL model be the single source of truth. Code-generators take care of providing the required client and server code, regardless of the implementation language.
+
+Another good example is using code-generation to generate configuration-, docker files and more from a single model. In this way, synchronizing changes across various configuration formats becomes a breeze.
+
+## More languages? More problems I say!
+Increasingly, products span multiple languages. Many projects have started as a prototype in PHP and ended up with tens or hundreds of micro-services in a myriad of languages. Long-lived organizations will experience several technological shifts. Insisting on hiring PL/1, fortran or cobol programmers is just not sustainable, but neither is rewriting everything in the language of the day.
+
+Language tradeoffs may lend them to certain use-cases while making them unfit for others; VM or machine-code ? Garbage collection or not? Static or dynamic typing? Functional or Object-oriented? Strict or lazy evaluation? Every choice matters.
+
+Increasingly, the ecosystem *around* the language also matters. Python is arguably the preferred data-science and machine-learning language today because of its ecosystem of packages and projects supporting such tasks, which in turn begets even more libraries.
+
+Finally, the run-time matters. Writing highly performant code in Python is harder than in Go and making Java FAAS programs start with the speed of Javascript requires extreme effort, possibly a different compiler and careful selection of libraries.
+
+Using multiple languages certainly introduces some complexity, but making *one* language work for all use-cases and reinventing all the necessary libraries from other ecosystems is arguably more effort.
+
 
 ### Summary
 * Reduce boilerplate without increasing complexity via leveraging advanced/opague language features
