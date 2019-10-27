@@ -280,7 +280,7 @@ def compile(config: Configuration, watch: bool) -> None:
             p = Process(target=do_compile_singlecore, args=(config.parser, walker, should_replace))
             p.start()
             p.join()
-            log.info("compile finished in {0:.2f}s".format(time()-t_start))
+            log.info("compile finished in {0:.2f}s".format(time() - t_start))
 
         compilefn = compile_sc
     else:
