@@ -254,10 +254,6 @@ cdef class FileWriter:
             raise GhostwriterError("failed to write to file")
         self.got_newline = s.endswith('\n')
 
-    def __dealloc__(self):
-        if fflush(self.out) != 0:
-            raise GhostwriterError("failed to flush output - file may miss contents")
-
     def __repr__(self):
         return f"<FileWriter out: {'open' if self.out != NULL else 'null'}>"
 
@@ -585,7 +581,7 @@ cdef class Parser:
             wchar_t *line_ptr = self.line.ptr
         return file_write(self.fh_out, self.encoder, line_ptr, self.line.strlen)
 
-    cdef int expand_snippet(self, Context ctx) except -1:
+    cdef expand_snippet(self, Context ctx):
         cdef:
             wchar_t buf = '\0'
             FileWriter fw = FileWriter.from_handle(self.fh_out, self.encoder)
@@ -596,15 +592,19 @@ cdef class Parser:
         except Exception as e:
             log.exception(f"{clr.Style.BRIGHT}{clr.Fore.RED}Fatal error expanding snippet '{clr.Fore.MAGENTA}{snippet}{clr.Fore.RED}'{clr.Style.RESET_ALL}")
             reason = "error parsing snippet"
+
             raise GhostwriterSnippetError(
                 snippet, self.line_num, ctx,
                 reason=reason
             ) from e
+        finally:
+            if fflush(fw.out) != 0:
+                log.warning("Failed to flush file buffer - some contents may be missing.")
 
-        # ensure snippet ends with a newline
-        # (so that snippet end line is printed properly)
-        if not fw.got_newline:
-            file_write(self.fh_out, self.encoder, &NEWLINE, 1)
+            # ensure snippet ends with a newline
+            # (so that snippet end line is printed properly)
+            if not fw.got_newline:
+                file_write(self.fh_out, self.encoder, &NEWLINE, 1)
 
     cdef PARSE_RES doparse(self, Context ctx) nogil except PARSE_EXCEPTION:
         cdef int read_status = READ_OK
@@ -661,7 +661,6 @@ cdef class Parser:
 
         try:
             parse_result = self.doparse(ctx)
-            return parse_result
         finally:
             if fflush(self.fh_out) != 0:
                 raise GhostwriterError("flushing output failed!")
@@ -673,6 +672,7 @@ cdef class Parser:
                 self.fh_in = NULL
 
             if parse_result == PARSE_OK and self.should_replace_file(self.tmp_file_path.ptr, fpath):
-                os_replace(self.tmp_file_path.ptr, fpath)
+                os_replace(self.post_process(self.tmp_file_path.ptr, fpath))
             else:
                 os_remove(self.tmp_file_path.ptr)
+        return parse_result
