@@ -614,7 +614,7 @@ cdef class Parser:
             if read_status:
                 if read_status == READ_ERR:
                     with gil:
-                        log.error(f"READ_ERR outer")
+                        log.error(f"fileparser:doparse: got READ_ERR from readline() (outer loop)")
                     return PARSE_READ_ERR
                 break
 
@@ -634,7 +634,7 @@ cdef class Parser:
                     #       attempt to read the line again even though EOF?
                     if read_status == READ_ERR:
                         with gil:
-                            log.error(f"READ_ERR inner!")
+                            log.error(f"fileparser:doparse: got READ_ERR from readline() (inner loop)")
                         return PARSE_READ_ERR
                     break
 
