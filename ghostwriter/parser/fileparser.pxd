@@ -39,10 +39,8 @@ cdef extern from "wcsenc.h" nogil:
         pass
 
 snippet_cb = t.Callable[[Context, IWriter], None]
-#should_replace_file_cb = t.Callable[[str, str], bool]
 
 ctypedef void* c_snippet_cb
-#ctypedef void* c_should_replace_file_cb
 
 cdef class FileWriter:
     cdef FILE *out
