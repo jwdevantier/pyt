@@ -58,6 +58,7 @@ cdef class Parser:
 
     cdef str temp_file_suffix
     cdef object should_replace_file
+    cdef object post_process
 
     # buffer holding the name of the temporary file made iff
     # input and eventual output file are the same (in-place writing)

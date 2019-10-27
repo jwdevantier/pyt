@@ -19,12 +19,12 @@ from ghostwriter.utils.fhash import file_hash
 
 from ghostwriter.utils.watch import Watcher, SearchPathsWatcher, CompileWatcher, MPScheduler, watch_dirs, WatcherConfig
 from ghostwriter.cli.conf import Configuration, ConfParser
+from ghostwriter.utils.resolv import resolv, resolv_opt
 
 log = logging.getLogger(__name__)
 
 CompileFn = t.Callable[[], None]
 Changeset = t.Set[t.Tuple[Change, str]]
-
 
 def compiler_input_files(w: Watcher, path: str) -> t.Iterator[os.DirEntry]:
     for entry in os.scandir(path):
@@ -109,25 +109,11 @@ class SnippetUnhandledExceptionError(SnippetError):
 
 
 def expand_snippet(ctx: Context, snippet: str, prefix: str, out: IWriter):
-    mod_name, fn_name = parse_snippet_name(snippet)
-    if mod_name == "<none>":
-        raise InvalidSnippetName(snippet)
-    log.debug(f"expanding {snippet} (fn: {fn_name}, module: {mod_name})")
-    try:
-        mod = import_module(mod_name)
-    except ModuleNotFoundError as e:
-        if str(e) == f"No module named '{mod_name}'":
-            raise SnippetModuleNotFoundError(snippet) from e
-        # some dependency could not be located
-        raise SnippetModuleDependencyNotFoundError(snippet, e)
-
-    try:
-        snippet_fn = getattr(mod, fn_name)
-    except AttributeError as e:
-        raise SnippetNotFoundError(snippet) from e
+    snippet_fn = resolv(snippet)  # LOADS of possible exceptions
     try:
         snippet_fn(ctx, prefix, out)
     except TypeError as e:
+        fn_name = snippet.split('.')[-1]
         if str(e).startswith(f"{fn_name}()"):
             raise SnippetFunctionSignatureError(snippet) from e
         else:
@@ -220,30 +206,37 @@ class MPCompiler(MPScheduler):
         return self.parser_conf.processes
 
     def _target(self, jobs: mp.connection.Connection):
+        sys.path.extend(self.parser_conf.search_paths)
         parser = Parser(
             self.parser_conf.open, self.parser_conf.close,
             temp_file_suffix=self.parser_conf.temp_file_suffix,
-            should_replace_file=self.should_replace)
-        sys.path.extend(self.parser_conf.search_paths)
+            should_replace_file=self.should_replace,
+            post_process=resolv_opt(self.parser_conf.post_process_fn))
         fpath: str = jobs.recv()
         while fpath != "<stop>":
             try:
+                log.error("PRE PARSE")
                 out = parser.parse(expand_snippet, fpath)
+                log.error(f"parser.parse => {out}")
                 if out:
                     log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
                     log.error(f"in: {fpath}")
             except GhostwriterSnippetError as e:
                 print_snippet_error(e)
+            except Exception as e:
+                log.exception("parsing - unhandled exception caught:")
             fpath = jobs.recv()
+
 
 
 def do_compile_singlecore(parser_conf: ConfParser, walker: CompileWatcher,
                           should_replace: t.Callable[[str, str], bool]):
+    sys.path.extend(parser_conf.search_paths)
     parser = Parser(
         parser_conf.open, parser_conf.close,
         temp_file_suffix=parser_conf.temp_file_suffix,
-        should_replace_file=should_replace)
-    sys.path.extend(parser_conf.search_paths)
+        should_replace_file=should_replace,
+        post_process=resolv_opt(parser_conf.post_process_fn))
     num_files_parsed = 0
     for entry in compiler_input_files(walker, walker.root_path):
         try:

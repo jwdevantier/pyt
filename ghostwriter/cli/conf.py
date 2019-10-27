@@ -1,12 +1,13 @@
 from pathlib import Path
 import yaml
 import typing as t
-from ghostwriter.utils import spec as s
-from ghostwriter.utils.error import GhostwriterError
+from re import compile as re_compile
 from multiprocessing import cpu_count
 from os.path import expanduser
 import io
 import logging
+from ghostwriter.utils import spec as s
+from ghostwriter.utils.error import GhostwriterError
 
 log = logging.getLogger(__file__)
 
@@ -31,6 +32,33 @@ def _nonempty(value):
         return value if len(value) != 0 else False
     except TypeError:
         return False
+
+
+re_py_identifier = re_compile(r"(?:[a-zA-Z_][a-zA-Z_0-9]*)")
+
+
+def _py_import_path(value):
+    """
+    Test if str could be a valid Python import path.
+
+    Import paths are characterized by being str's with more than
+    one component separated by periods ('.').
+    Each component must be a valid package/module/function name and
+    all identifiers accept a-zA-Z_ as their first character and
+    a-zA-Z_0-9 for all subsequent characters.
+    """
+    if not isinstance(value, str):
+        return False
+
+    parts = value.split('.')
+    if len(parts) <= 1:
+        return False
+
+    if all((len(value) > 0
+            and re_py_identifier.match(value)
+            for value in parts)):
+        return value
+    raise ValueError("invalid")
 
 
 def pp_log_conf(config: t.Mapping[str, t.Any]):
@@ -91,7 +119,11 @@ GW_CONF_PARSER_SPEC = s.keys({
     'search_paths': s.req(s.allof({
         'non-empty?': s.predicate(_nonempty, 'non-empty?'),
         'list of dirs?': s.seqof(Directory())
-    }))
+    })),
+    'post_process_fn': s.opt(s.allof({
+        'string?': s.str,
+        'python import path': s.predicate(_py_import_path, "python import path")
+    })),
 })
 
 GW_CONF_SPEC = s.keys({
@@ -142,6 +174,7 @@ class ConfParser:
         self.ignore_patterns = conf['ignore_patterns']
         self.ignore_dir_patterns = conf['ignore_dir_patterns']
         self.search_paths = conf['search_paths']
+        self.post_process_fn = conf['post_process_fn']
 
     def __repr__(self):
         return (f"{type(self).__name__}<"

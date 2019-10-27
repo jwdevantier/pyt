@@ -326,6 +326,25 @@ cdef enum:
     READ_ERR = 1
     READ_LINE_TOO_LONG = 2
 
+def should_replace_file_always(fpath_result: str, fpath_orig: str):
+    """
+    By default, the parser will query this function whether to replace the
+    parsed contents with its original to which the answer will always be
+    true.
+
+    Provide another strategy to abort circular parsing, for instance.
+    """
+    return True
+
+def post_process_noop(fpath_parsed: str):
+    """
+    Default parser post-processing function.
+
+    Takes input file path and returns it again to the parser. This amounts to
+    a no-operation (no-op).
+    """
+    return fpath_parsed
+
 # TODO: is it OK that tag_open == tag_close (e.g. '@@')
 cdef class Parser:
     def __init__(
@@ -333,7 +352,8 @@ cdef class Parser:
             tag_open: str = '<@@', tag_close: str = '@@>',
             *,
             temp_file_suffix: str = '.gw.tmp',
-            object should_replace_file = lambda src, dst: True,
+            object should_replace_file = None,
+            object post_process = None,
             size_t buf_len_line = BUF_LINE_LEN,
             size_t buf_snippet_name_len = BUF_SNIPPET_NAME_LEN,
             size_t buf_indent_by_len = BUF_INDENT_BY_LEN):
@@ -343,7 +363,8 @@ cdef class Parser:
             raise ValueError("buf_len_line must be positive")
 
         self.temp_file_suffix = temp_file_suffix
-        self.should_replace_file = should_replace_file
+        self.should_replace_file = should_replace_file or should_replace_file_always
+        self.post_process = post_process or post_process_noop
 
         #self.tmp_file_path = CString(250)
         self.tmp_file_path = cstr_new(250)
