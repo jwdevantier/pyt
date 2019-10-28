@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 CompileFn = t.Callable[[], None]
 Changeset = t.Set[t.Tuple[Change, str]]
 
+
 def compiler_input_files(w: Watcher, path: str) -> t.Iterator[os.DirEntry]:
     for entry in os.scandir(path):
         if entry.is_dir():
@@ -58,40 +59,6 @@ class SnippetError(Exception):
 
         self.message = message
         super().__init__(self.message)
-
-
-class InvalidSnippetName(SnippetError):
-    def __init__(self, snippet_fqn: str):
-        super().__init__(
-            snippet_fqn,
-            f"snippet name invalid - should be of form 'path.to.module.fn_name'")
-
-
-class SnippetModuleNotFoundError(SnippetError):
-    def __init__(self, snippet_fqn: str):
-        mod, fn_name = parse_snippet_name(snippet_fqn)
-        self.search_paths = sys.path
-        super().__init__(
-            snippet_fqn,
-            f"module '{mod}' not found - maybe you have a typo or not all search paths have been added")
-
-
-class SnippetModuleDependencyNotFoundError(SnippetError):
-    def __init__(self, snippet_fqn: str, err: ModuleNotFoundError):
-        mod, _ = parse_snippet_name(snippet_fqn)
-        self.search_paths = sys.path
-        super().__init__(
-            snippet_fqn,
-            f"Error importing module '{mod}': {str(err)}"
-        )
-
-
-class SnippetNotFoundError(SnippetError):
-    def __init__(self, snippet_fqn: str):
-        mod, fn_name = parse_snippet_name(snippet_fqn)
-        super().__init__(
-            snippet_fqn,
-            f"snippet '{fn_name}' not found in module '{mod}'")
 
 
 class SnippetFunctionSignatureError(SnippetError):
@@ -226,7 +193,6 @@ class MPCompiler(MPScheduler):
             except Exception as e:
                 log.exception("parsing - unhandled exception caught:")
             fpath = jobs.recv()
-
 
 
 def do_compile_singlecore(parser_conf: ConfParser, walker: CompileWatcher,
