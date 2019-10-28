@@ -5,13 +5,12 @@ import sys
 import typing as t
 import multiprocessing as mp
 from multiprocessing import Process
-from importlib import import_module
 from time import time
 
 from watchgod.watcher import Change
 import colorama as clr
 
-from ghostwriter.parser import Parser, Context, PARSE_OK, parse_result_err, GhostwriterSnippetError
+from ghostwriter.parser import Parser, Context, GhostwriterSnippetError
 import ghostwriter.parser as pparse
 from ghostwriter.utils.decorators import Debounce
 from ghostwriter.protocols import IWriter
@@ -208,7 +207,7 @@ def do_compile_singlecore(parser_conf: ConfParser, walker: CompileWatcher,
         try:
             out = parser.parse(expand_snippet, entry.path)
             num_files_parsed += 1
-            if out != 0:
+            if out:
                 log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
                 log.error(f"in: {entry.path}")
         except GhostwriterSnippetError as e:
