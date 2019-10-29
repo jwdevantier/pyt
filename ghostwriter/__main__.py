@@ -43,3 +43,9 @@ def cli(ctx, project):
 def compile(config, watch):
     cli_compile.compile(config, watch)
     sys.exit(0)
+
+
+# If packaged with pyinstaller, the 'frozen' attribute is True
+# pass on control to click, passing all arguments along.
+if getattr(sys, 'frozen', False):
+    cli(sys.argv[1:])

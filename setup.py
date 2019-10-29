@@ -2,10 +2,20 @@ from setuptools import find_packages
 from Cython.Build import cythonize
 from distutils.core import setup
 from distutils.extension import Extension
+import pathlib as pl
+import os
+import subprocess
+import traceback
+import sys
+import distutils.cmd
 
 import re
 
 req_line_rgx = re.compile(r'^-r\s+(?P<fname>.+)$')
+
+
+def this_dir() -> pl.Path:
+    return pl.Path(__file__).parent
 
 
 def requirements_from(fname):
@@ -14,6 +24,7 @@ def requirements_from(fname):
         if match:
             return requirements_from(match.group('fname'))
         return req
+
     with open(fname) as req_file:
         req_line_iter = (line.strip() for line in req_file)
         requirements = [
@@ -29,11 +40,49 @@ def requirements_from(fname):
                         yield elem
                 else:
                     yield resolved_req
+
         return reqlist()
 
 
 install_requires = list(requirements_from('requirements.txt'))
 test_requires = list(requirements_from('requirements.dev.txt'))
+
+HIDDEN_MODULES = [
+    'ghostwriter.writer',
+    'ghostwriter.utils.template',
+]
+
+
+class BuildBinaryCommand(distutils.cmd.Command):
+    """
+    """
+    description = "build self-contained binary"
+    user_options = []
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        """
+        Generate self-contained binary file
+        """
+        program_main_file = os.path.join(this_dir().as_posix(), 'ghostwriter', '__main__.py')
+        if not pl.Path(program_main_file).exists():
+            print("ERROR!")
+            print("    pyinstaller command needs a 'main' file - some file which starts the program.")
+            print(f"    The build script references: '{program_main_file}'")
+            print(f"but this file cannot be found!")
+            sys.exit(1)
+        cmd = ["pyinstaller", "--noconfirm", '--nowindow', '--onefile']
+        for module in HIDDEN_MODULES:
+            cmd.extend(['--hidden-import', module])
+        cmd.extend(['--name', 'gwrite', program_main_file])
+        print("> ", " ".join(cmd))
+        subprocess.check_call(cmd)
+
 
 setup(
     name='ghostwriter',
@@ -57,6 +106,9 @@ setup(
         Extension("ghostwriter.utils.spec.spec", ["ghostwriter/utils/spec/spec.pyx"]),
         Extension("ghostwriter.utils.fhash.fhash", ["ghostwriter/utils/fhash/fhash.pyx"]),
         Extension("ghostwriter.utils.template.tokens", ["ghostwriter/utils/template/tokens.pyx"]),
-    ], annotate=True)
+    ], annotate=True),
+    cmdclass={
+        'build_bin': BuildBinaryCommand
+    }
 
 )
