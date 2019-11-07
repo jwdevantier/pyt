@@ -4,16 +4,26 @@ from enum import Enum, unique as enum_unique_values
 from re import compile as re_compile
 from functools import wraps
 import inspect
+import logging
 
 from ghostwriter.utils.template.tokens import *
 from ghostwriter.utils.template.scope import Scope
 from ghostwriter.utils.text import deindent_str_block
 from ghostwriter.protocols import IWriter
 
+log = logging.getLogger(__name__)
+
 Element = t.Union[str,]
 Blocks = t.Dict[str, t.Callable[['EvalContext', 'TokenIterator', Scope], None]]
 Components = t.Dict[str, t.Type['Component']]
 ScopeLike = t.Mapping[str, t.Any]
+
+
+class DSLSyntaxError(SyntaxError):
+    def __init__(self, message: str, source: str, offset: int, env: t.Mapping):
+        self.source = source
+        self.env = env
+        super().__init__(message, ('<DSL>', 1, offset, source))
 
 
 # TODO: issue - %% lines aren't rewritten
@@ -106,12 +116,6 @@ def token_stream(text: str):
                 else:
                     continue
             yield NewlineToken()
-
-
-def _eval_exprs(expr: str, scope: Scope):
-    # TODO: add some code to enable dot lookups and whatnot (?)
-    # Signature: eval(expr: str, globals: dict, locals: dict)
-    return eval(expr, {}, scope)
 
 
 class TokenIterator:
@@ -251,8 +255,13 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
             else:
                 ctx.writer.writeln("")
         elif typ == ExprToken:
-            result = _eval_exprs(token.expr, scope)
-            ctx.buffer_append(to_str(result))
+            try:
+                result = py_eval_expr(scope, token.expr)
+                ctx.buffer_append(to_str(result))
+            except SyntaxError as se:
+                raise DSLSyntaxError(
+                    "error evaluating expression",
+                    token.expr, se.offset, scope) from se
         elif typ == CtrlToken:
             if len(ctx.buffer) != 0:
                 flush_buffer(ctx)
@@ -263,7 +272,12 @@ def dsl_eval_main(ctx: EvalContext, tokens: TokenIterator, scope: Scope, stop: t
                 # 'r MyComponent(one, two, three='wee')
                 # ... and expressions evaluating to a component instance
                 # 'r self.somevar['key'](one, two, three='wee')
-                component = py_eval(scope, f"_it = {token.args}")['_it']
+                try:
+                    component = py_eval_expr(scope, token.args)
+                except SyntaxError as se:
+                    raise DSLSyntaxError(
+                        "error evaluating expression",
+                        token.args, se.offset, scope) from se
                 if not isinstance(component, Component):
                     raise DSLBlockRenderExpressionError(token.args, component)
                 dsl_eval_component(ctx, tokens, scope, component)
@@ -403,7 +417,14 @@ def dsl_eval_if(ctx: EvalContext, tokens: TokenIterator, scope: Scope, cond_expr
     accepted_tags = {'elif', 'else', '/if'}
     while True:
         if kw in {'if', 'elif'}:
-            if _eval_exprs(cond_expr, scope):
+            try:
+                res = py_eval_expr(scope, cond_expr)
+            except SyntaxError as se:
+                raise DSLSyntaxError(
+                    "error evaluating condition in if-block",
+                    f"{kw} {cond_expr}",
+                    se.offset + 1 + len(kw), scope) from se
+            if res:
                 dsl_eval_main(ctx, tokens, Scope(outer=scope), stop_at_ctrl_tokens(accepted_tags))
 
                 # skip past all other branches in if-block
@@ -445,16 +466,64 @@ def gen_loop_iterator(for_src, env: t.Mapping):
     bindings_lst = (
         f"'{ident}': {ident}" for ident in (
         x.strip() for x in bindings.split(',')))
-    return py_eval(
-        env,
-        "_it = ({" f"{', '.join(bindings_lst)}" "} " f"for {bindings} in {iterable})",
-    )['_it']
+    code_prefix = "({" f"{', '.join(bindings_lst)}" "} "
+
+    try:
+        return py_eval_expr(
+            env,
+            code_prefix + f"for {bindings} in {iterable})")
+    except SyntaxError as se:
+        offset = se.offset - len(code_prefix)
+        raise DSLSyntaxError(
+            "syntax error in for-clause",
+            f"for {for_src}", offset, env) from se
 
 
 def py_eval(env: t.Mapping, prog: str) -> t.Mapping:
+    """
+    Evaluate Python program
+
+    Parameters
+    ----------
+    env
+        The context in which the program is run. `env` may contain any
+        number of variable bindings.
+    prog
+        A stand-alone python program, where program is taken to mean
+        some number of expressions or statements.
+
+    Returns
+    -------
+        The resulting environment
+    """
     eval_locals = {}
     exec(prog, dict(env), eval_locals)
     return eval_locals
+
+
+def py_eval_expr(env: t.Mapping, expr):
+    """
+    Evaluate Python expression and return its value
+
+    Parameters
+    ----------
+    env
+        The context in which to evaluate the expression. `env` may contain
+        any number of variable bindings.
+    expr
+        The expression to evaluate.
+
+    Returns
+    -------
+        The resulting value from evaluating the expression.
+    """
+    try:
+        eval_locals = {}
+        exec(f"_it = {expr}", dict(env), eval_locals)
+        return eval_locals['_it']
+    except SyntaxError as se:
+        se.offset -= len('_it = ')
+        raise se
 
 
 def snippet(blocks: t.Optional[Blocks] = None):
