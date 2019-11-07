@@ -181,9 +181,7 @@ class MPCompiler(MPScheduler):
         fpath: str = jobs.recv()
         while fpath != "<stop>":
             try:
-                log.error("PRE PARSE")
                 out = parser.parse(expand_snippet, fpath)
-                log.error(f"parser.parse => {out}")
                 if out:
                     log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
                     log.error(f"in: {fpath}")
