@@ -34,3 +34,6 @@ ghostwriter/utils/fhash/*html
 
 ghostwriter/utils/template/*.c
 ghostwriter/utils/template/*.html
+
+ghostwriter/utils/cogen/*.c
+ghostwriter/utils/cogen/*.html
