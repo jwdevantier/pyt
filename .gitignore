@@ -21,6 +21,8 @@ __pycache__
 *.so
 *.dylib
 *.dll
+dist/**
+build/**
 
 # cython - specific libraries
 ghostwriter/parser/fileparser.c
