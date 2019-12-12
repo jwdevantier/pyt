@@ -1,75 +1,101 @@
 import pytest
-from ghostwriter.utils.cogen.tokenizer import *
+from ghostwriter.utils.cogen.tokenizer import (
+    Tokenizer,
+    PyTokenFactory as TokenFactory
+)
 
-EOF = EndOfFile()
-NL = Newline()
+NL = TokenFactory.newline()
+EOF = TokenFactory.eof()
 
 
 @pytest.mark.parametrize("msg, prog, toks", [
     ("simple literal",
-     "hello", [Literal('hello')]),
+     "hello", [
+         TokenFactory.literal('hello')
+     ]),
+
     ("literal line",
-     "hello\n", [Literal('hello'), NL]),
+     "hello\n", [
+         TokenFactory.literal('hello'),
+         NL
+     ]),
+
     ("two literal lines",
-     "hello\nworld", [Literal("hello"), NL, Literal("world")]),
+     "hello\nworld", [
+         TokenFactory.literal("hello"),
+         NL,
+         TokenFactory.literal("world")
+     ]),
 
     # literals + exprs
     ("literal line with trailing expr",
-     "hello <<world>>", [Literal('hello '), Expr('world')]),
+     "hello <<world>>", [
+         TokenFactory.literal('hello '),
+         TokenFactory.expr('world')
+     ]),
+
     ("literal line with expr",
      "hello, <<free>> world", [
-        Literal("hello, "),
-        Expr("free"),
-        Literal("world")
-    ]),
+         TokenFactory.literal("hello, "),
+         TokenFactory.expr("free"),
+         TokenFactory.literal("world")
+     ]),
+
     ("leading expr",
-     "<<thing>>", [Expr("thing")]),
+     "<<thing>>", [
+         TokenFactory.expr("thing")
+     ]),
 
     # control lines
     ("control keyword",
-     "%for", [CtrlKw('for')]),
+     "%for", [TokenFactory.ctrl_kw('for')]),
+
     ("control keyword - whitespace suffix",
-     "%for ", [CtrlKw('for')]),
+     "%for ", [TokenFactory.ctrl_kw('for')]),
+
     ("control keyword - whitespace prefix",
-     "  %for ", [CtrlKw('for')]),
+     "  %for ", [TokenFactory.ctrl_kw('for')]),
+
     ("control keyword - whitespace between '%' and keyword",
-     "% for ", [CtrlKw('for')]),
+     "% for ", [TokenFactory.ctrl_kw('for')]),
+
     ("control keyword, newline",
-     "%for\n", [CtrlKw('for'), NL]),
+     "%for\n", [TokenFactory.ctrl_kw('for'), NL]),
 
     ("control keyword - with args",
      "%for x in [1,2,3,4]",
-     [CtrlKw('for'), CtrlArgs('x in [1,2,3,4]')]),
+     [TokenFactory.ctrl_kw('for'), TokenFactory.ctrl_args('x in [1,2,3,4]')]),
+
     ("control keyword - no args",
      '\n'.join([
          "% foo",
          "hello",
          "% /foo"
-     ]), [CtrlKw('foo'),
+     ]), [TokenFactory.ctrl_kw('foo'),
           NL,
-          Literal('hello'),
+          TokenFactory.literal('hello'),
           NL,
-          CtrlKw('/foo')]),
+          TokenFactory.ctrl_kw('/foo')]),
 
     ("escaped control string (=> literal)",
-     "%% literal", [Literal('% literal')]),
+     "%% literal", [TokenFactory.literal('% literal')]),
 
     ("small program",
      '\n'.join([
-        "hello <<thing>>",
-        "%for x in [1,2,3]",
-        "<<x>>!",
-        "%/for"]),
-     [Literal("hello "),
-      Expr("thing"),
+         "hello <<thing>>",
+         "%for x in [1,2,3]",
+         "<<x>>!",
+         "%/for"]),
+     [TokenFactory.literal("hello "),
+      TokenFactory.expr("thing"),
       NL,
-      CtrlKw('for'),
-      CtrlArgs('x in [1,2,3]'),
+      TokenFactory.ctrl_kw('for'),
+      TokenFactory.ctrl_args('x in [1,2,3]'),
       NL,
-      Expr('x'),
-      Literal('!'),
+      TokenFactory.expr('x'),
+      TokenFactory.literal('!'),
       NL,
-      CtrlKw('/for')])
+      TokenFactory.ctrl_kw('/for')])
 ])
 def test_tokenizer(msg, prog, toks):
     p = Tokenizer(prog)
