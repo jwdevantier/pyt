@@ -1,5 +1,7 @@
 # cython: language_level=3
+from ghostwriter.utils.cogen.tokenizer cimport TokenType
 
+ctypedef Py_ssize_t (*token_type_fn)(void *o)
 
 cdef class Node:
     pass
@@ -11,11 +13,11 @@ ctypedef object NODE
 
 cdef class UnexpectedTokenError(Exception):
     cdef:
-        str token_type
+        Py_ssize_t token_type
 
 cdef class Definition:
     cdef:
-        str token_type
+        TokenType token_type
         size_t lbp
         nud_fn nud_fn
         led_fn led_fn
@@ -26,9 +28,7 @@ cdef class Definition:
 cdef class Grammar:
     cdef:
         dict definitions
-        size_t rbp(self, TOKEN token)
-        NODE parse_nud(self, TOKEN first, Parser parser)
-        NODE parse_led(self, TOKEN first, Parser parser, NODE left)
+        cdef Definition get_definition(self, Py_ssize_t token_type)
 
 cdef class Parser:
     cdef:
@@ -36,6 +36,15 @@ cdef class Parser:
         object tokenizer
         TOKEN curr_token
         dict definitions
+        token_type_fn token_type
 
-    cdef TOKEN advance(self, str typ)
+    @staticmethod
+    cdef Parser new(Grammar grammar, object tokenizer, token_type_fn token_type)
+
+    cdef TOKEN advance(self, TokenType typ)
     cpdef NODE parse(self, size_t rbp=?)
+
+    cdef:
+        size_t _rbp(self, TOKEN token)
+        NODE _parse_nud(self, TOKEN token)
+        NODE _parse_led(self, TOKEN token, NODE left)

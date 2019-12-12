@@ -1,14 +1,15 @@
+from ghostwriter.utils.cogen.tokenizer cimport TokenType
 DEF BP_LOWEST = 0
 
 cdef class UnexpectedTokenError(Exception):
-    def __init__(self, str token_type, str msg = None):
+    def __init__(self, Py_ssize_t token_type, str msg = None):
         self.token_type = token_type
         super().__init__(
             f"Unexpected '{token_type}' - {msg}" if msg else f"Unexpected '{token_type}'"
         )
 
 cdef class Definition:
-    def __init__(self, str token_type, size_t lbp):
+    def __init__(self, TokenType token_type, size_t lbp):
         self.token_type = token_type
         self.lbp = lbp
         self.nud_fn = None
@@ -31,13 +32,13 @@ cdef class Grammar:
     def __init__(self):
         self.definitions = {}
 
-    def symbol(self, type: str) -> None:
+    def symbol(self, type: TokenType) -> None:
         if type in self.definitions:
             raise RuntimeError(f"symbol '{type}' already defined!")
 
         self.definitions[type] = Definition(type, BP_LOWEST)
 
-    def nud(self, type: str, lbp=BP_LOWEST):
+    def nud(self, type: TokenType, lbp=BP_LOWEST):
         def wrapper(fn):
             cdef Definition definition = self.definitions.get(type)
             if definition is None:
@@ -49,7 +50,7 @@ cdef class Grammar:
             return fn
         return wrapper
 
-    def led(self, type: str, lbp=BP_LOWEST):
+    def led(self, type: TokenType, lbp=BP_LOWEST):
         def wrapper(fn):
             cdef Definition definition = self.definitions.get(type)
             if definition is None:
@@ -63,7 +64,7 @@ cdef class Grammar:
 
     # helpers
 
-    def literal(self, type: str):
+    def literal(self, type: TokenType):
         def decorator(fn):
             @self.nud(type)
             def null_denotation(token: TOKEN, parser: Parser) -> NODE:
@@ -71,7 +72,7 @@ cdef class Grammar:
             return fn
         return decorator
 
-    def prefix(self, type: str, bp: int):
+    def prefix(self, type: TokenType, bp: int):
         def decorator(fn):
             @self.nud(type, bp)
             def null_denotation(token: TOKEN, parser: Parser) -> NODE:
@@ -80,7 +81,7 @@ cdef class Grammar:
             return fn
         return decorator
 
-    def infix(self, type, bp):
+    def infix(self, type: TokenType, bp: int):
         def decorator(fn):
             @self.led(type, bp)
             def left_denotation(operator, parser, left):
@@ -89,7 +90,7 @@ cdef class Grammar:
             return fn
         return decorator
 
-    def infix_r(self, type: str, bp: int):
+    def infix_r(self, type: TokenType, bp: int):
         """
         Create a right-associative infix parsing rule.
 
@@ -116,7 +117,7 @@ cdef class Grammar:
             return fn
         return decorator
 
-    def postfix(self, type: str, bp: int):
+    def postfix(self, type: TokenType, bp: int):
         def decorator(fn):
             @self.led(type, bp)
             def left_denotation(operator, parser, left):
@@ -124,19 +125,19 @@ cdef class Grammar:
             return fn
         return decorator
 
-    def enclosing(self, type_begin: str, type_end: str, bp: int):
+    def enclosing(self, type_begin: TokenType, type_end: TokenType, bp: int):
         def decorator(fn):
             @self.nud(type_begin, bp)
             def null_denotation(left: TOKEN, parser: Parser) -> None:
                 cdef:
                     NODE body = parser.parse()
                     TOKEN right = parser.advance(type_end)
-                return fn(left, right, body) # TODO: seems odd, check arg order
+                return fn(left, right, body)
             self.symbol(type_end)
             return fn
         return decorator
 
-    def ternary(self, t_first_sep, t_second_sep, bp):
+    def ternary(self, t_first_sep: TokenType, t_second_sep: TokenType, bp):
         def decorator(fn):
             @self.led(t_first_sep, bp)
             def left_denotation(first_sep: TOKEN, parser: Parser, left: NODE):
@@ -148,26 +149,21 @@ cdef class Grammar:
             return fn
         return decorator
 
-    # INTERNAL API
-
-    cdef size_t rbp(self, TOKEN token):
+    # Internal API
+    cdef Definition get_definition(self, TokenType token_type):
         cdef:
-            Definition definition = self.definitions.get(token.type)
+            Definition definition = self.definitions.get(token_type)
         if definition is None:
-            raise UnexpectedTokenError(token.type)
-        return definition.lbp
+            raise UnexpectedTokenError(token_type)
+        return definition
 
-    cdef NODE parse_nud(self, TOKEN token, Parser parser):
-        cdef Definition definition = self.definitions.get(token.type)
-        if definition is None:
-            raise UnexpectedTokenError(token.type)
-        return definition.nud(token, parser)
 
-    cdef NODE parse_led(self, TOKEN token, Parser parser, NODE left):
-        cdef Definition definition = self.definitions.get(token.type)
-        if definition is None:
-            raise UnexpectedTokenError(token.type)
-        return definition.led(token, parser, left)
+cdef TokenType default_token_type_fn(void *tok):
+    # Fallback function for determining token type.
+    # This will be slower as it depends on Python to inspect the
+    # object and find its 'type' attribute.
+    # However, it will work and allow for easy testing...
+    return (<object>tok).type
 
 
 cdef class Parser:
@@ -175,8 +171,15 @@ cdef class Parser:
         self.grammar = grammar
         self.tokenizer = tokenizer
         self.curr_token = next(tokenizer)
+        self.token_type = default_token_type_fn
 
-    cdef TOKEN advance(self, str typ):
+    @staticmethod
+    cdef Parser new(Grammar grammar, object tokenizer, token_type_fn token_type):
+        cdef Parser p = Parser(grammar, tokenizer)
+        p.token_type = token_type
+        return p
+
+    cdef TOKEN advance(self, TokenType typ):
         cdef TOKEN advanced
         if self.curr_token.type == typ:
             advanced = self.curr_token
@@ -189,9 +192,20 @@ cdef class Parser:
             TOKEN left = self.curr_token
             NODE left_node
         self.curr_token = next(self.tokenizer)
-        left_node = self.grammar.parse_nud(left, self)
-        while rbp < self.grammar.rbp(self.curr_token):
+        left_node = self._parse_nud(left)
+        while rbp < self._rbp(self.curr_token):
             left = self.curr_token
             self.curr_token = next(self.tokenizer)
-            left_node = self.grammar.parse_led(left, self, left_node)
+            left_node = self._parse_led(left, left_node)
         return left_node
+
+    # INTERNAL API
+
+    cdef size_t _rbp(self, TOKEN token):
+        return self.grammar.get_definition(self.token_type(<void *>token)).lbp
+
+    cdef NODE _parse_nud(self, TOKEN token):
+        return self.grammar.get_definition(self.token_type(<void *>token)).nud(token, self)
+
+    cdef NODE _parse_led(self, TOKEN token, NODE left):
+        return self.grammar.get_definition(self.token_type(<void *>token)).led(token, self, left)
