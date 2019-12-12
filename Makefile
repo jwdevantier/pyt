@@ -35,3 +35,13 @@ compile: venv
 dev-setup: venv venv-dev compile
 	. venv/bin/activate ;\
 		pip install -e .
+
+.PHONY: bin
+bin: venv-dev
+	. venv/bin/activate ;\
+		pyinstaller \
+			--noconfirm \
+			--nowindow \
+			--onefile \
+			--name gwriter \
+			ghostwriter/__main__.py
