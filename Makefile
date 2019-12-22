@@ -36,6 +36,11 @@ dev-setup: venv venv-dev compile
 	. venv/bin/activate ;\
 		pip install -e .
 
+.PHONY: test
+test: venv compile
+	. venv/bin/activate ;\
+		pytest .
+
 .PHONY: bin
 bin: venv-dev
 	. venv/bin/activate ;\
