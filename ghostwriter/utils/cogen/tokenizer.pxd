@@ -15,6 +15,12 @@ cdef:
     TokenType CTRL_ARGS
 
 
+cdef class Location:
+    cdef:
+        size_t _line
+        size_t _col
+
+
 cdef class Token:
     cpdef public str lexeme
     cpdef public TokenType type
@@ -39,6 +45,7 @@ cdef class TokenFactory:
     @staticmethod
     cdef Token ctrl_args(str lexeme)
 
+
 cdef class PyTokenFactory:
     pass
 
@@ -53,5 +60,7 @@ cdef class Tokenizer:
 
         Token _parse_literal(self, Py_ssize_t start)
     cpdef Token next(self)
+    cpdef Location location(self)
+
 
 cpdef str token_label(TokenType t)

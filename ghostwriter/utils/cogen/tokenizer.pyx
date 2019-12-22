@@ -3,6 +3,7 @@ cdef extern from "wctype.h" nogil:
     int iswblank(wchar_t ch ); # wint_t
     int iswspace(wchar_t ch)  # wint_t
 
+
 cdef:
     TokenType EOF = 10
     TokenType NEWLINE = 11
@@ -10,6 +11,7 @@ cdef:
     TokenType LITERAL = 13
     TokenType CTRL_KW = 14
     TokenType CTRL_ARGS = 15
+
 
 cpdef str token_label(TokenType t):
     if t == EOF:
@@ -28,6 +30,32 @@ cpdef str token_label(TokenType t):
         return f"UNKNOWN({t})"
 
 
+cdef class Location:
+    def __init__(self, size_t line, size_t col):
+        self._line = line
+        self._col = col
+
+    def __repr__(self):
+        return f"Location<Line: {self._line}, Column: {self._col}>"
+
+    def __str__(self):
+        return f"L{self._line}:{self._col}"
+
+    def __eq__(self, other):
+        return (
+            isinstance(other, Location)
+            and other._line == self._line
+            and other._col == self._col)
+
+    @property
+    def line(self):
+        return self._line
+
+    @property
+    def col(self):
+        return self._col
+
+
 cdef class Token:
     def __init__(self, TokenType type, str lexeme):
         self.lexeme = lexeme
@@ -42,9 +70,11 @@ cdef class Token:
     def __repr__(self):
         return f"({self.type}: {self.lexeme})"
 
+
 cdef:
     Token T_EOF = Token(EOF, '<EOF>')
     Token T_NEWLINE = Token(NEWLINE, '<NL>')
+
 
 cdef class TokenFactory:
     @staticmethod
@@ -70,6 +100,7 @@ cdef class TokenFactory:
     @staticmethod
     cdef Token ctrl_args(str lexeme):
         return Token(CTRL_ARGS, lexeme)
+
 
 cdef class PyTokenFactory:
     """Python-only wrapper for TokenFactory
@@ -197,3 +228,26 @@ cdef class Tokenizer:
             if pos == len(self.prog):
                 return T_EOF
             raise RuntimeError("Invalid parse-state")
+
+    cpdef Location location(self):
+        """Compute current line and column offset of tokenizer.
+        Returns
+        -------
+            A `Location` object describing the line number and column offset of the tokenizer's current position.
+        """
+        cdef:
+            wchar_t *buf = self.buf
+            size_t end_pos = self.pos
+
+            size_t pos = 0
+
+            size_t line = 1
+            size_t nl_pos = 0
+
+        while pos <= end_pos:
+            if buf[pos] == '\n':
+                nl_pos = pos
+                line += 1
+            pos += 1
+
+        return Location(line, end_pos - nl_pos - 1)
