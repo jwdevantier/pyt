@@ -54,6 +54,12 @@ cdef class CLine(Node):
     cpdef public str args
 
 
+cdef class Component(Node):
+    cpdef public str identifier
+    cpdef public str args
+    cpdef public list lines
+
+
 cdef class CogenParser:
     # fields
     cdef:

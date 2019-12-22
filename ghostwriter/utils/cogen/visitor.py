@@ -1,6 +1,6 @@
 from typing import Callable, List
 from ghostwriter.utils.cogen.parser import (
-    Program, Block, If, Literal, Expr, Line, CLine, Node
+    Program, Block, If, Literal, Expr, Line, CLine, Component
 )
 import re
 
@@ -42,24 +42,6 @@ class ASTVisitor(Visitor):
 
     def visit_CLine(self, node: CLine):
         return node
-
-
-class Component(Node):
-    def __init__(self, identifier: str, args: str, lines: List[Node]):
-        self.identifier = identifier
-        self.args = args
-        self.lines = lines
-
-    def __eq__(self, other):
-        return (
-            isinstance(other, self.__class__)
-            and other.identifier == self.identifier
-            and other.args == self.args
-            and other.lines == self.lines
-        )
-
-    def __repr__(self):
-        return f'r({self.identifier}: ~~{self.args}~~, {self.lines})'
 
 
 class RewriteComponentNodes(ASTVisitor):
