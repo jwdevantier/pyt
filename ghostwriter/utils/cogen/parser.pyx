@@ -1,4 +1,3 @@
-# from ghostwriter.utils.cogen.pratt cimport Parser, Grammar
 from ghostwriter.utils.cogen.tokenizer cimport (
     Token, Tokenizer, token_label,
     EOF, NEWLINE, EXPR, LITERAL, CTRL_KW, CTRL_ARGS
@@ -7,6 +6,44 @@ from ghostwriter.utils.cogen.tokenizer cimport (
 cdef class Node:
     def __repr__(self):
         return f"{type(self).__name__}"
+
+
+cdef class ParserError(Exception):
+    def __init__(self, Location location, str error):
+        super().__init__(error)
+        self.error = error
+        self.location = location
+
+    def __repr__(self):
+        return f"ParserError({str(self.location)}: {self.error})"
+
+    def __str__(self):
+        return f"Error parsing at {self.location.line}, column {self.location.col}: {self.error}"
+
+
+cdef class UnexpectedTokenError(ParserError):
+    def __init__(self, Location location, Token token):
+        cdef:
+            str error = f"Unexpected token {token.type}"
+        super().__init__(location, error)
+        self.token = token
+
+
+cdef class InvalidBlockNestingError(ParserError):
+    def __init__(self, Location location, str expected, str actual):
+        cdef:
+            str error = f"invalid nesting of blocks, expected '{expected}', got '{actual}'"
+        super().__init__(location, error)
+        self.expected = expected
+        self.actual = actual
+
+
+cdef class InvalidEndBlockArgsError(ParserError):
+    def __init__(self, Location location, str end_kw):
+        cdef:
+            str error = f"block end token '{end_kw}' cannot have arguments"
+        super().__init__(location, error)
+        self.end_kw = end_kw
 
 
 cdef class Program(Node):
@@ -127,6 +164,7 @@ cdef size_t lexeme_to_ifkw(str kw):
         return IFKW_ELSE
     return IFKW_NONE
 
+
 cdef str ifkw_to_lexeme(size_t ifstate):
     if ifstate == 1:
         return 'if'
@@ -163,10 +201,11 @@ cdef class CogenParser:
                     if self.curr_token.lexeme == end_kw:
                         # found the end of this block, stop here
                         self.advance() # eat token
-                        # TODO: check if there are any arguments in token, raise error
+                        if self.curr_token.type == CTRL_ARGS:
+                            raise InvalidEndBlockArgsError(self.tokenizer.location(), end_kw)
                         break
                     else:
-                        raise RuntimeError(f"incorrect token nesting, got '{self.curr_token.lexeme}', expected '{end_kw}'")
+                        raise InvalidBlockNestingError(self.tokenizer.location(), end_kw, self.curr_token.lexeme)
                 # => entering new ctrl block
                 lines.append(self._parse_block_node(self._parse_cline()))
             elif tok_type == NEWLINE:
@@ -194,10 +233,10 @@ cdef class CogenParser:
                     if self.curr_token.lexeme[0] == '/':
                         # => end/close tag, '/if' or a mistake
                         if self.curr_token.lexeme != '/if':
-                            raise RuntimeError(f"invalid nesting of blocks, expected '/if', got '{self.curr_token.lexeme}'")
+                            raise InvalidBlockNestingError(self.tokenizer.location(), '/if', self.curr_token.lexeme)
                         self.advance()  # eat the '/if'
                         if self.curr_token.type == CTRL_ARGS:
-                            raise RuntimeError("'/if' cannot have arguments")
+                            raise InvalidEndBlockArgsError(self.tokenizer.location(), '/if')
                         if_node.conds.append(cond)
                         break # break while-loop
                     # => nested block
@@ -208,15 +247,17 @@ cdef class CogenParser:
                     if_node.conds.append(cond)
                     cond = Block(self._parse_cline())
                     if cond.header.keyword == 'else' and cond.header.args != '':
-                        raise RuntimeError(f"invalid 'else' clause, got 'else {cond.header.args}'")
+                        raise ParserError(self.tokenizer.location(),
+                                          f"invalid 'else' clause, additional arguments '{cond.header.args}' not allowed")
                     continue
                 else:
-                    raise RuntimeError(f"invalid clause in if-block, '{self.curr_token.lexeme}' cannot follow '{ifkw_to_lexeme(state)}'")
+                    raise ParserError(self.tokenizer.location(),
+                                      f"invalid order of clauses in if-block, '{self.curr_token.lexeme}' cannot follow '{ifkw_to_lexeme(state)}'")
             elif tok_type == NEWLINE:
                 self.advance()
             elif tok_type == EOF:
                 # TODO: handle better
-                raise RuntimeError("Unexpected EOF in block")
+                raise RuntimeError("Unexpected EOF in if-block")
         return if_node
 
     cdef Node _parse_block_node(self, CLine header):
@@ -266,5 +307,5 @@ cdef class CogenParser:
             elif tok_type == NEWLINE:
                 self.advance()
             else:
-                raise RuntimeError(f"unexpected token {tok_type}")
+                raise UnexpectedTokenError(self.tokenizer.location(), self.curr_token)
         return prog

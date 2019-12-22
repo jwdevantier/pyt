@@ -1,10 +1,26 @@
 # cython: language_level=3
 from ghostwriter.utils.cogen.tokenizer cimport (
-    TokenType, Token, Tokenizer)
+    TokenType, Token, Tokenizer, Location)
 
 
 cdef class Node:
     pass
+
+
+cdef class ParserError(Exception):
+    cpdef public str error
+    cpdef public Location location
+
+cdef class UnexpectedTokenError(ParserError):
+    cpdef public Token token
+
+cdef class InvalidBlockNestingError(ParserError):
+    cpdef public str expected
+    cpdef public str actual
+
+
+cdef class InvalidEndBlockArgsError(ParserError):
+    cpdef public str end_kw
 
 
 cdef class Program(Node):
@@ -14,13 +30,6 @@ cdef class Program(Node):
 cdef class Block(Node):
     cpdef public CLine header
     cpdef public list lines
-
-
-# # Would want
-# # (<cond: str>, <branch: Block>)
-# cdef class IfCond(Node):
-#     cpdef public str cond
-#     cpdef public Block then
 
 
 cdef class If(Node):
