@@ -1,8 +1,5 @@
 # cython: language_level=3
 ctypedef Py_UNICODE wchar_t
-
-# cdef enum TokenType:
-#     CtrlKwTok, CtrlArgsTok, ExprTok, LiteralTok, NewlineTok, EOFTok
 ctypedef Py_ssize_t TokenType
 
 
