@@ -39,3 +39,6 @@ ghostwriter/utils/template/*.html
 
 ghostwriter/utils/cogen/*.c
 ghostwriter/utils/cogen/*.html
+
+ghostwriter/utils/iwriter.c
+ghostwriter/utils/iwriter.html

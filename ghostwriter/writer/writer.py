@@ -2,7 +2,7 @@ from io import StringIO
 import attr
 import typing as t
 from typing_extensions import Protocol
-from ghostwriter.protocols import IWriter
+from ghostwriter.utils.iwriter import IWriter
 
 
 # Minimal writer inspired by PicoCog

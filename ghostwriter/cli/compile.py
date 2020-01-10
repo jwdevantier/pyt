@@ -13,7 +13,7 @@ import colorama as clr
 from ghostwriter.parser import Parser, Context, GhostwriterSnippetError
 import ghostwriter.parser as pparse
 from ghostwriter.utils.decorators import Debounce
-from ghostwriter.protocols import IWriter
+from ghostwriter.utils.iwriter import IWriter
 from ghostwriter.utils.fhash import file_hash
 
 from ghostwriter.utils.watch import Watcher, SearchPathsWatcher, CompileWatcher, MPScheduler, watch_dirs, WatcherConfig

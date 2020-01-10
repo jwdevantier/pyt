@@ -4,7 +4,6 @@ from ghostwriter.utils.template.dsl import (
     token_stream, TokenIterator,
     LineWriter, EvalContext, dsl_eval_main
 )
-from ghostwriter.protocols import IWriter
 
 from io import StringIO
 import typing as t

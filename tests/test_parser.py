@@ -1,5 +1,5 @@
 from ghostwriter.parser import *
-from ghostwriter.protocols import IWriter
+from ghostwriter.utils.iwriter import IWriter
 from ghostwriter.cli.compile import parse_snippet_name
 
 import pytest

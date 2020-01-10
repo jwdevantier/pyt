@@ -9,6 +9,7 @@ from os import replace as os_replace, remove as os_remove
 import typing as t
 import logging
 import colorama as clr
+from ghostwriter.utils.iwriter cimport IWriter
 
 log = logging.getLogger(__name__)
 
@@ -245,14 +246,14 @@ cdef unicode snippet_repr(snippet *self):
 ################################################################################
 ## FileWriter
 ################################################################################
-cdef class FileWriter:
-    cpdef void write(self, str s):
+cdef class FileWriter(IWriter):
+    cpdef void write(self, str contents):
         cdef:
-            wchar_t *s_ptr = s
-            int ret = file_write(self.out, self.encoder, s_ptr, len(s))
+            wchar_t *s_ptr = contents
+            int ret = file_write(self.out, self.encoder, s_ptr, len(contents))
         if ret:
             raise GhostwriterError("failed to write to file")
-        self.got_newline = s.endswith('\n')
+        self.got_newline = contents.endswith('\n')
 
     def __repr__(self):
         return f"<FileWriter out: {'open' if self.out != NULL else 'null'}>"

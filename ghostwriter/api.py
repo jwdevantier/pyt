@@ -1,5 +1,5 @@
 from ghostwriter.parser.fileparser import Context
-from ghostwriter.protocols import IWriter
+from ghostwriter.utils.iwriter import IWriter
 from ghostwriter.writer import Writer
 from ghostwriter.utils.template.dsl import (
     Component, Scope, render, template

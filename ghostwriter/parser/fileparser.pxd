@@ -1,7 +1,7 @@
 # cython: language_level=3
 from libc.stdio cimport FILE
 import typing as t
-from ghostwriter.protocols import IWriter
+from ghostwriter.utils.iwriter cimport IWriter
 
 ctypedef Py_UNICODE wchar_t
 
@@ -42,7 +42,7 @@ snippet_cb = t.Callable[[Context, IWriter], None]
 
 ctypedef void* c_snippet_cb
 
-cdef class FileWriter:
+cdef class FileWriter(IWriter):
     cdef FILE *out
     cdef wcsenc_t *encoder
     cdef bint got_newline

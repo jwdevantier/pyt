@@ -9,7 +9,7 @@ import logging
 from ghostwriter.utils.template.tokens import *
 from ghostwriter.utils.template.scope import Scope
 from ghostwriter.utils.text import deindent_str_block
-from ghostwriter.protocols import IWriter
+from ghostwriter.utils.iwriter import IWriter
 
 log = logging.getLogger(__name__)
 
