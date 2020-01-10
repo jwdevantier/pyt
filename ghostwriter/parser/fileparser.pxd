@@ -38,9 +38,10 @@ cdef extern from "wcsenc.h" nogil:
     ctypedef struct wcsenc_t:
         pass
 
-snippet_cb = t.Callable[[Context, IWriter], None]
 
-ctypedef void* c_snippet_cb
+cdef class SnippetCallbackFn:
+    cpdef void apply(self, Context ctx, str snippet, str prefix, IWriter fw) except *
+
 
 cdef class FileWriter(IWriter):
     cdef FILE *out
@@ -93,4 +94,4 @@ cdef class Parser:
 cdef class Context:
     cdef readonly wchar_t *src
     cpdef readonly dict env
-    cdef c_snippet_cb on_snippet
+    cdef readonly SnippetCallbackFn on_snippet

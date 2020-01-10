@@ -10,7 +10,7 @@ from time import time
 from watchgod.watcher import Change
 import colorama as clr
 
-from ghostwriter.parser import Parser, Context, GhostwriterSnippetError
+from ghostwriter.parser import Parser, Context, GhostwriterSnippetError, SnippetCallbackFn
 import ghostwriter.parser as pparse
 from ghostwriter.utils.decorators import Debounce
 from ghostwriter.utils.iwriter import IWriter
@@ -74,18 +74,19 @@ class SnippetUnhandledExceptionError(SnippetError):
             f"Unhandled exception")
 
 
-def expand_snippet(ctx: Context, snippet: str, prefix: str, out: IWriter):
-    snippet_fn = resolv(snippet)  # LOADS of possible exceptions
-    try:
-        snippet_fn(ctx, prefix, out)
-    except TypeError as e:
-        fn_name = snippet.split('.')[-1]
-        if str(e).startswith(f"{fn_name}()"):
-            raise SnippetFunctionSignatureError(snippet) from e
-        else:
+class ExpandSnippet(SnippetCallbackFn):
+    def apply(self, ctx: Context, snippet: str, prefix: str, fw: IWriter):
+        snippet_fn = resolv(snippet)  # LOADS of possible exceptions
+        try:
+            snippet_fn(ctx, prefix, fw)
+        except TypeError as e:
+            fn_name = snippet.split('.')[-1]
+            if str(e).startswith(f"{fn_name}()"):
+                raise SnippetFunctionSignatureError(snippet) from e
+            else:
+                raise SnippetUnhandledExceptionError(snippet) from e
+        except Exception as e:
             raise SnippetUnhandledExceptionError(snippet) from e
-    except Exception as e:
-        raise SnippetUnhandledExceptionError(snippet) from e
 
 
 class FileChecksums:
@@ -181,7 +182,7 @@ class MPCompiler(MPScheduler):
         fpath: str = jobs.recv()
         while fpath != "<stop>":
             try:
-                out = parser.parse(expand_snippet, fpath)
+                out = parser.parse(ExpandSnippet(), fpath)
                 if out:
                     log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
                     log.error(f"in: {fpath}")
@@ -203,7 +204,7 @@ def do_compile_singlecore(parser_conf: ConfParser, walker: CompileWatcher,
     num_files_parsed = 0
     for entry in compiler_input_files(walker, walker.root_path):
         try:
-            out = parser.parse(expand_snippet, entry.path)
+            out = parser.parse(ExpandSnippet(), entry.path)
             num_files_parsed += 1
             if out:
                 log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")

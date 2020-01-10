@@ -66,6 +66,11 @@ cdef extern from "wcsenc.h" nogil:
 ################################################################################
 ## Utils
 ################################################################################
+cdef class SnippetCallbackFn:
+    cpdef void apply(self, Context ctx, str snippet, str prefix, IWriter fw) except *:
+        pass
+
+
 cdef str tmp_file(str path, str suffix):
     in_dir = os_path_dirname(path)
     fname = f"{os_path_basename(path)}."
@@ -275,10 +280,10 @@ cdef class FileWriter(IWriter):
 ## Context
 ################################################################################
 cdef class Context:
-    def __init__(self, cb: snippet_cb, src: str):
+    def __init__(self, SnippetCallbackFn cb, str src):
         self.src = src
         self.env = {}
-        self.on_snippet = <c_snippet_cb> cb
+        self.on_snippet = cb
 
 ################################################################################
 ## Parser
@@ -589,7 +594,7 @@ cdef class Parser:
             str prefix = self.snippet_indent.ptr
             str snippet = self.snippet_start.cstr.ptr
         try:
-            (<object> ctx.on_snippet)(ctx, snippet, prefix, fw)
+            ctx.on_snippet.apply(ctx, snippet, prefix, fw)
         except Exception as e:
             log.exception(f"{clr.Style.BRIGHT}{clr.Fore.RED}Fatal error expanding snippet '{clr.Fore.MAGENTA}{snippet}{clr.Fore.RED}'{clr.Style.RESET_ALL}")
             reason = "error parsing snippet"
@@ -654,7 +659,7 @@ cdef class Parser:
                 break  # Done, go back to outer state
         return PARSE_OK
 
-    def parse(self, cb: snippet_cb, fpath: str) -> PARSE_RES:
+    def parse(self, SnippetCallbackFn cb: SnippetCallbackFn, str fpath: str) -> PARSE_RES:
         cdef:
             Context ctx = Context(cb, fpath)
             size_t parse_result = PARSE_EXCEPTION

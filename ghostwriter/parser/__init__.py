@@ -1,6 +1,6 @@
 # works, suspect it's a Cython-related issue
 from .fileparser import (
-    Parser, Context, parse_result_err, GhostwriterError, GhostwriterSnippetError)
+    Parser, Context, parse_result_err, GhostwriterError, GhostwriterSnippetError, SnippetCallbackFn)
 
 # Must match actual definitions in fileparser
 PARSE_OK = 0

@@ -159,9 +159,10 @@ def multiline_snippet(ctx: Context, prefix: str, out: IWriter):
     out.write(f"{prefix}3\n")
 
 
-def expand_snippet(ctx: Context, snippet: str, prefix: str, out: IWriter):
-    print(f"expanding snippet '{snippet}'...")
-    SNIPPETS[snippet](ctx, prefix, out)
+class ExpandSnippet(SnippetCallbackFn):
+    def apply(self, ctx: Context, snippet: str, prefix: str, fw: IWriter):
+        print(f"expanding snippet '{snippet}'...")
+        SNIPPETS[snippet](ctx, prefix, fw)
 
 
 @pytest.mark.parametrize("mode, contents", [
@@ -184,7 +185,7 @@ def test_write_inplace_ok(tmpfile, mode, contents):
         input_fname = input_contents.name
     parser = Parser('<@@', '@@>')
     retval = parser.parse(
-        expand_snippet,
+        ExpandSnippet(),
         input_fname)
     assert retval == PARSE_OK, "expected parsing to work"
 
@@ -206,7 +207,7 @@ def test_write_inplace_errs(tmpfile, contents):
         input_fname = input_contents.name
     parser = Parser('<@@', '@@>')
     retval = parser.parse(
-        expand_snippet,
+        ExpandSnippet(),
         input_fname)
     assert retval != PARSE_OK, "expected parsing to fail"
 
