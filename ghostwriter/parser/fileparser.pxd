@@ -5,9 +5,11 @@ from ghostwriter.utils.iwriter cimport IWriter
 
 ctypedef Py_UNICODE wchar_t
 
+
 cdef extern from "wchar.h" nogil:
     ctypedef struct mbstate_t:
         pass
+
 
 ctypedef unsigned int PARSE_RES
 cdef enum:
@@ -19,20 +21,24 @@ cdef enum:
     PARSE_SNIPPET_NAMES_MISMATCH = 5
     PARSE_EXCEPTION = 1000
 
+
 cdef struct cstr:
     size_t buflen
     wchar_t *ptr
     size_t strlen
+
 
 cdef enum SNIPPET_TYPE:
     SNIPPET_NONE
     SNIPPET_OPEN
     SNIPPET_CLOSE
 
+
 cdef struct snippet:
     cstr *cstr
     SNIPPET_TYPE type
     size_t line_num
+
 
 cdef extern from "wcsenc.h" nogil:
     ctypedef struct wcsenc_t:
@@ -51,6 +57,7 @@ cdef class FileWriter(IWriter):
 
     @staticmethod
     cdef FileWriter from_handle(FILE *fh, wcsenc_t *encoder)
+
 
 cdef class Parser:
     # file handlers for input and output files
@@ -90,6 +97,7 @@ cdef class Parser:
     cdef int writeline(self) nogil
     cdef expand_snippet(self, Context ctx)
     cdef unsigned int doparse(self, Context ctx) nogil except PARSE_EXCEPTION
+
 
 cdef class Context:
     cdef readonly wchar_t *src
