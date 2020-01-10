@@ -87,7 +87,7 @@ class BuildBinaryCommand(distutils.cmd.Command):
 setup(
     name='ghostwriter',
     version='0.1',
-    packages=find_packages(),
+    packages=find_packages(exclude=["tests", "tests.*", "testlib", "testlib.*"]),
     license='MIT',
     long_description=open('README.md').read(),
     entry_points={
