@@ -58,5 +58,5 @@ from ghostwriter.utils.cogen.visitor import RewriteComponentNodes, Component
 def test_component(msg, prog, result):
     parser = CogenParser(Tokenizer(prog))
     v = RewriteComponentNodes()
-
-    assert v.visit(parser.parse_program()) == result, f"failed: {msg}"
+    ast = parser.parse_program()
+    assert v.visit(ast) == result, f"failed: {msg}"
