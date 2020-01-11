@@ -193,6 +193,12 @@ cdef str ifkw_to_lexeme(size_t ifstate):
     return None
 
 
+cdef inline bint is_line_start(TokenType tok_type):
+    """True iff. token type signals start of a `Line`."""
+    # Lines can start with a literal OR an expression.
+    return tok_type == LITERAL or tok_type == EXPR
+
+
 cdef class CogenParser:
     def __init__(self, Tokenizer tokenizer):
         self.tokenizer = tokenizer
@@ -212,7 +218,7 @@ cdef class CogenParser:
             TokenType tok_type
         while True:
             tok_type = self.curr_token.type
-            if tok_type == LITERAL:
+            if is_line_start(tok_type):
                 lines.append(self._parse_line())
             elif tok_type == CTRL_KW:
                 if self.curr_token.lexeme[0] == '/':
@@ -242,7 +248,7 @@ cdef class CogenParser:
             size_t kw_state = IFKW_NONE
         while True:
             tok_type = self.curr_token.type
-            if tok_type == LITERAL:
+            if is_line_start(tok_type):
                 cond.lines.append(self._parse_line())
             elif tok_type == CTRL_KW:
                 kw_state = lexeme_to_ifkw(self.curr_token.lexeme)
@@ -318,7 +324,7 @@ cdef class CogenParser:
             TokenType toktype
         while self.curr_token.type != EOF:
             tok_type = self.curr_token.type
-            if tok_type == LITERAL:
+            if is_line_start(tok_type):
                 prog.lines.append(self._parse_line())
             elif tok_type == CTRL_KW:
                 prog.lines.append(self._parse_block_node(self._parse_cline()))
