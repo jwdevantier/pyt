@@ -22,6 +22,9 @@ class TestCase:
         self.ast = ast
         self.examples = examples
 
+    def __repr__(self):
+        return f"TestCase({self.header})"
+
 
 line_literal_simplest = TestCase(
     "line - single literal",

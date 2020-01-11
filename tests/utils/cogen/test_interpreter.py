@@ -27,6 +27,8 @@ class BufferWriter(IWriter):
 def collect_testcase_examples(*testcases: progs.TestCase)\
         -> t.Generator[t.Tuple[progs.TestCase, progs.Example], None, None]:
     for testcase in testcases:
+        if len(testcase.examples) == 0:
+            raise RuntimeError(f"{testcase} has no examples! Remove case from list or write examples to use")
         for example in testcase.examples:
             yield testcase, example
 
@@ -45,8 +47,7 @@ def test_smth(case, example):
     print("start")
     buf: BufferWriter = BufferWriter()
     writer: Writer = Writer(buf)
-    blocks = dict()  # TODO: REMOVE, SHOULD BE PROVIDED BY EXAMPLE
-    interpret(case.ast, writer, blocks, example.scope)
+    interpret(case.ast, writer, example.blocks, example.scope)
     print(buf.getvalue())
     assert buf.getvalue() == example.result, \
         f"{case.header} ({example.header if example.header else '<unnamed>'})"
