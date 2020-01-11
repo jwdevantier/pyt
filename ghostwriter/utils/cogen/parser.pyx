@@ -25,7 +25,7 @@ cdef class ParserError(Exception):
 cdef class UnexpectedTokenError(ParserError):
     def __init__(self, Location location, Token token):
         cdef:
-            str error = f"Unexpected token {token.type}"
+            str error = f"Unexpected token (lexeme: {token.lexeme}, type: {token.type} ({token_label(token.type)}))"
         super().__init__(location, error)
         self.token = token
 
@@ -282,6 +282,8 @@ cdef class CogenParser:
             elif tok_type == EOF:
                 # TODO: handle better
                 raise RuntimeError("Unexpected EOF in if-block")
+            else:
+                raise UnexpectedTokenError(self.tokenizer.location(), self.curr_token)
         return if_node
 
     cdef Node _parse_block_node(self, CLine header):
