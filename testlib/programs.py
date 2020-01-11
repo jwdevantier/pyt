@@ -39,6 +39,7 @@ line_literal_simplest = TestCase(
         {},
         ))
 
+
 line_lit_var = TestCase(
     "line - literal, multiple elements (& variable)",
     [
@@ -62,6 +63,7 @@ line_lit_var = TestCase(
         ],
         {'thing': 'people'},))
 
+
 line_expr_first = TestCase(
     "line starting with an expression",
     [
@@ -80,6 +82,7 @@ line_expr_first = TestCase(
         {"greeting": "hello!"}
     )
 )
+
 
 line_lit_adv = TestCase(
     "line - multiple literals and expressions",
@@ -100,6 +103,7 @@ line_lit_adv = TestCase(
         {"name": "Peter", "age": 12}
     )
 )
+
 
 if_simplest = TestCase(
     "if-simplest",
@@ -126,6 +130,7 @@ if_simplest = TestCase(
         {"x": None},
     )
 )
+
 
 if_elif_else = TestCase(
     "if-elif-else block",
@@ -164,6 +169,7 @@ if_elif_else = TestCase(
         ],
         {'foo': 3}))
 
+
 for_block_simplest = TestCase(
     "for loop - block",
     [
@@ -190,24 +196,19 @@ for_block_simplest = TestCase(
     Example(
         'two-item iterable',
         [
-            "something\n",
+            "something",
             "something\n"
         ],
         {'y': [1, 2]}))
 
 
 for_block_use_var = TestCase(
-    "for loop - block",
+    "for loop using vars - block",
     [
         "%for name, age in persons",
         "<<name>>: <<age>> years old",
         "%/for"
     ],
-    # [
-    #     "%for name, age in persons",
-    #     "<<name>>",
-    #     "%/for"
-    # ],
     Program([
         Block(
             CLine('for', 'name, age in persons'), [
@@ -223,11 +224,11 @@ for_block_use_var = TestCase(
         [
             "Peter: 12 years old\n"
         ],
-        {'persons': [("peter", 12)]}),
+        {'persons': [("Peter", '12')]}),
     Example(
         'two-item iterable',
         [
-            "Janet: 38 years old\n",
+            "Janet: 38 years old",
             "Peter: 12 years old\n"
         ],
         {'persons': [('Janet', 38), ('Peter', 12)]})
