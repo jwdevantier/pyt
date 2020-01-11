@@ -77,7 +77,7 @@ line_expr_first = TestCase(
     Example(
         "",
         [
-            "hello!"
+            "hello!\n"
         ],
         {"greeting": "hello!"}
     )
@@ -98,7 +98,7 @@ line_lit_adv = TestCase(
     Example(
         "",
         [
-            "Peter: 12 years old"
+            "Peter: 12 years old\n"
         ],
         {"name": "Peter", "age": 12}
     )
