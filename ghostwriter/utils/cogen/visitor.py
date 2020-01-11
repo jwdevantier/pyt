@@ -1,10 +1,6 @@
-from typing import Callable, List
 from ghostwriter.utils.cogen.parser import (
-    Program, Block, If, Literal, Expr, Line, CLine, Component
+    Program, Block, If, Literal, Expr, Line, CLine
 )
-import re
-
-rgx_fn_call = re.compile(r"(?P<ident>^[^\d\W]\w*)\((?P<args>.*)\)\Z", re.UNICODE)
 
 
 class Visitor:
@@ -42,15 +38,3 @@ class ASTVisitor(Visitor):
 
     def visit_CLine(self, node: CLine):
         return node
-
-
-class RewriteComponentNodes(ASTVisitor):
-    def visit_Block(self, node: Block):
-        if node.header.keyword != 'r':
-            return super().visit_Block(node)
-        m = rgx_fn_call.match(node.header.args)
-        if not m:
-            raise RuntimeError("Invalid component")
-        return Component(m.group('ident'), m.group('args'), [
-            self.visit(l) for l in node.lines
-        ])

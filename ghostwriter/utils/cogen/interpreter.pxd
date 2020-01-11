@@ -2,7 +2,7 @@
 
 from ghostwriter.utils.iwriter cimport IWriter
 from ghostwriter.utils.cogen.parser cimport (
-    Program, Block, If, Literal, Expr, Line, CLine, Component, Node
+    Program, Block, If, Literal, Expr, Line, CLine, Node
 )
 
 

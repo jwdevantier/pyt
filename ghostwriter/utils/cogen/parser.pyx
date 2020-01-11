@@ -148,24 +148,6 @@ cdef class CLine(Node):
             return f"CLine({self.keyword})"
 
 
-cdef class Component(Node):
-    def __init__(self, identifier: str, args: str, list lines: List[Node]):
-        self.identifier = identifier
-        self.args = args
-        self.lines = lines
-
-    def __eq__(self, other):
-        return (
-            isinstance(other, self.__class__)
-            and other.identifier == self.identifier
-            and other.args == self.args
-            and other.lines == self.lines
-        )
-
-    def __repr__(self):
-        return f'r({self.identifier}: ~~{self.args}~~, {self.lines})'
-
-
 cdef:
     size_t IFKW_NONE = 0
     size_t IFKW_IF = 1
