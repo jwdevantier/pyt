@@ -34,6 +34,8 @@ def collect_testcase_examples(*testcases: progs.TestCase)\
 @pytest.mark.parametrize("case, example", collect_testcase_examples(
     progs.line_literal_simplest,
     progs.line_lit_var,
+    progs.line_expr_first,
+    progs.line_lit_adv,
     progs.if_simplest,
     progs.if_elif_else,
     progs.for_block_simplest,
