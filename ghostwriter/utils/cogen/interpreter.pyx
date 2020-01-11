@@ -1,4 +1,5 @@
 cimport cython
+from ghostwriter.utils.cogen.component import Component
 from re import compile as re_compile
 
 # TODO: want a 'def'/'set' block to update scope - can call out to functions..?
@@ -84,7 +85,6 @@ def gen_loop_iterator(str stx, dict scope):
         x.strip() for x in bindings.split(',')))
 
     code = f"({{ {', '.join(bindings_lst)} }} for {bindings} in {iterable})"
-    print(f"for-loop code: //{code}//")
     return py_eval_expr(
         scope,
         code)
@@ -145,7 +145,6 @@ cdef void interp_if(If ifblock, Writer w, dict blocks, dict scope) except *:
     for cond in ifblock.conds:
         if cond.header.keyword != 'else':
             # conditional
-            print(f"{cond.header} >> {cond.header.args}")
             if py_eval_expr(scope, cond.header.args):
                 for n in cond.lines:
                     interp_node(n, w, blocks, scope)
@@ -156,12 +155,34 @@ cdef void interp_if(If ifblock, Writer w, dict blocks, dict scope) except *:
             return
 
 
+cdef void interp_component(Block block, Writer w, dict blocks, dict scope) except *:
+    cdef:
+        dict new_scope = scope.copy()
+        dict new_blocks = blocks.copy()
+        # TODO: handle syntax errors here
+        object component = py_eval_expr(new_scope, block.header.args)
+    if not isinstance(component, Component):
+        raise ValueError(f"'{block.header.args}' should evaluate to a Component, got '{stringify_type(component)}'")
+    new_scope['self'] = component
+    # TODO: block.lines should be bound to 'body' somehow
+    #       see dsl.py > dsl_eval_component > render_body
+
+    # TODO: derive blocks with body -- bound to render body
+    interpret(component.ast, w, new_blocks, new_scope)
+
+
 cdef void interp_block(Block block, Writer w, dict blocks, dict scope) except *:
-    if block.header.keyword == "for":
-        for loop_bindings in gen_loop_iterator(block.header.args, scope):
-            scope.update(loop_bindings)  # TODO: find a means of testing this - vars changed in one iter should be carried over
+    cdef dict new_scope
+    if block.header.keyword == "r": # handle component
+        interp_component(block, w, blocks, scope)
+        return
+    elif block.header.keyword == "for": # handle for-block
+        # TODO: assuming lexical scope here, OK?
+        new_scope = scope.copy()
+        for loop_bindings in gen_loop_iterator(block.header.args, new_scope):
+            new_scope.update(loop_bindings)  # TODO: find a means of testing this - vars changed in one iter should be carried over
             for n in block.lines:
-                interp_node(n, w, blocks, scope)
+                interp_node(n, w, blocks, new_scope)
     else:
         raise RuntimeError(f"cannot handle '{block.header.keyword}' blocks yet")
 
