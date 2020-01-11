@@ -147,6 +147,7 @@ cdef class CLine(Node):
         else:
             return f"CLine({self.keyword})"
 
+
 cdef class Component(Node):
     def __init__(self, identifier: str, args: str, list lines: List[Node]):
         self.identifier = identifier
