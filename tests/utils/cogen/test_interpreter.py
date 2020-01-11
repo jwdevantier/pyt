@@ -1,6 +1,6 @@
 import pytest
+from testlib.bufferwriter import BufferWriter
 
-from ghostwriter.utils.iwriter import IWriter
 from ghostwriter.utils.cogen.interpreter import interpret, Writer
 from ghostwriter.utils.cogen.parser import (
     CogenParser, Program, Literal, Expr, Line, CLine, Block, If,
@@ -9,18 +9,6 @@ from ghostwriter.utils.cogen.parser import (
 from io import StringIO
 import typing as t
 from testlib import programs as progs
-
-
-class BufferWriter(IWriter):
-    def __init__(self):
-        super().__init__()
-        self._buffer = StringIO()
-
-    def write(self, contents: str):
-        self._buffer.write(contents)
-
-    def getvalue(self) -> str:
-        return self._buffer.getvalue()
 
 
 # TODO: write fn to generate full list of tests (essentially unrolling the loop so each test is shown in the output)
