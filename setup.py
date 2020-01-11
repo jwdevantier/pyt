@@ -108,6 +108,7 @@ setup(
         Extension("ghostwriter.utils.iwriter", ["ghostwriter/utils/iwriter.pyx"]),
         Extension("ghostwriter.utils.template.tokens", ["ghostwriter/utils/template/tokens.pyx"]),
         Extension("ghostwriter.utils.cogen.tokenizer", ["ghostwriter/utils/cogen/tokenizer.pyx"]),
+        Extension("ghostwriter.utils.cogen.interpreter", ["ghostwriter/utils/cogen/interpreter.pyx"]),
         Extension("ghostwriter.utils.cogen.pratt", ["ghostwriter/utils/cogen/pratt.pyx"]),
         Extension("ghostwriter.utils.cogen.parser", ["ghostwriter/utils/cogen/parser.pyx"]),
     ], annotate=True),
