@@ -31,3 +31,16 @@ class Debounce:
             self.timer.cancel()
         self.timer = Timer(self.elapsed, lambda: self(*args, **kwargs))
         self.timer.start()
+
+
+# TODO: needs tests
+class CachedStaticProperty:
+    """Works like @property and @staticmethod combined"""
+
+    def __init__(self, func):
+        self.func = func
+
+    def __get__(self, inst, owner):
+        result = self.func(owner)
+        setattr(owner, self.func.__name__, result)
+        return result
