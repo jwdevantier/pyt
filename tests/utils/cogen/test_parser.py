@@ -12,6 +12,7 @@ from testlib import programs as progs
 @pytest.mark.parametrize("case", [
     progs.line_literal,
     progs.line_lit_var,
+    progs.if_simplest,
     progs.if_elif_else,
     progs.for_block,
     progs.component_block,

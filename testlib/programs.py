@@ -59,6 +59,32 @@ line_lit_var = TestCase(
             'hello, people!\n'
         ]))
 
+if_simplest = TestCase(
+    "if-simplest",
+    [
+        "%if x is not None",
+        "x is something",
+        "%/if"
+    ],
+    Program([
+        If([Block(CLine('if', 'x is not None'), [
+            Line([Literal("x is something")])])])]),
+    Example(
+        "set x",
+        {"x": 1},
+        [
+            "x is something"
+        ]
+    ),
+    Example(
+        "x is unset",
+        {"x": None},
+        [
+            "\n"
+        ]
+    )
+)
+
 if_elif_else = TestCase(
     "if-elif-else block",
     [
