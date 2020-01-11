@@ -38,7 +38,7 @@ EOF = TokenFactory.eof()
      "hello, <<free>> world", [
          TokenFactory.literal("hello, "),
          TokenFactory.expr("free"),
-         TokenFactory.literal("world")
+         TokenFactory.literal(" world")
      ]),
 
     ("leading expr",

@@ -172,9 +172,11 @@ cdef class Tokenizer:
         if pos == self.prog_len:
             return T_EOF
 
-        # always skip whitespace (except \n)
-        while iswblank(buf[pos]):
-            pos += 1
+        # skip whitespace between tokens EXCEPT if last token is an EXPR (only NEWLINE or LITERAL follows)
+        if self.last != EXPR:
+            # skip all whitespace except '\n' (NEWLINE) itself.
+            while iswblank(buf[pos]):
+                pos += 1
 
         # emit newline token if needed
         if buf[pos] == '\n':
