@@ -3,6 +3,7 @@ import inspect
 from ghostwriter.utils.cogen.parser import CogenParser, Program
 from ghostwriter.utils.cogen.tokenizer import Tokenizer
 from ghostwriter.utils.decorators import CachedStaticProperty
+from ghostwriter.utils.ctext import deindent_block
 
 
 class ComponentMeta(type):
@@ -67,4 +68,4 @@ class Component(metaclass=ComponentMeta):
         """Parse Component program text into AST
 
         Lazily parses the component program text into an AST and caches it for future use."""
-        return CogenParser(Tokenizer(cls.template)).parse_program()
+        return CogenParser(Tokenizer(deindent_block(cls.template))).parse_program()
