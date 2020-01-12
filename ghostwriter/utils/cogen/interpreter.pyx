@@ -200,7 +200,7 @@ cdef void interp_node(Node n, Writer w, dict blocks, dict scope) except *:
         raise RuntimeError(f"Interpreter cannot handle '{stringify_type(n)}' nodes")
 
 
-cpdef void interpret(Program program, Writer w, dict blocks, dict scope):
+cpdef void interpret(Program program, Writer w, dict blocks, dict scope) except *:
     cdef Node n
     for n in program.lines:
         interp_node(n, w, blocks, scope)

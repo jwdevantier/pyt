@@ -19,4 +19,4 @@ cdef class Writer(IWriter):
     cpdef void newline(self)
 
 
-cpdef void interpret(Program program, Writer w, dict blocks, dict scope)
+cpdef void interpret(Program program, Writer w, dict blocks, dict scope) except *
