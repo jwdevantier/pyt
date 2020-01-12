@@ -19,4 +19,14 @@ cdef class Writer(IWriter):
     cpdef void newline(self)
 
 
+cdef class InterpreterError(Exception):
+    pass
+
+
+cdef class RenderArgTypeError(InterpreterError):
+    cdef:
+        str expr
+        str typ
+
+
 cpdef void interpret(Program program, Writer w, dict blocks, dict scope) except *

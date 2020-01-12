@@ -5,6 +5,15 @@ from re import compile as re_compile
 # TODO: want a 'def'/'set' block to update scope - can call out to functions..?
 
 for_loop_stx = re_compile(r"^(?P<bindings>.+?)\s+in\s+(?P<iterable>.+)")
+cdef class InterpreterError(Exception):
+    pass
+
+
+cdef class RenderArgTypeError(InterpreterError):
+    def __init__(self, str expr, object obj):
+        self.expr = expr
+        self.typ = stringify_type(obj)
+        super().__init__(f"render block expects component, but '{expr}' evaluated to '{self.typ}'")
 
 
 @cython.final
@@ -162,7 +171,7 @@ cdef void interp_component(Block block, Writer w, dict blocks, dict scope) excep
         # TODO: handle syntax errors here
         object component = py_eval_expr(new_scope, block.header.args)
     if not isinstance(component, Component):
-        raise ValueError(f"'{block.header.args}' should evaluate to a Component, got '{stringify_type(component)}'")
+        raise RenderArgTypeError(block.header.args, component)
     new_scope.update(component.__ghostwriter_component_scope__)
     new_scope['self'] = component
     # TODO: block.lines should be bound to 'body' somehow
