@@ -163,6 +163,7 @@ cdef void interp_component(Block block, Writer w, dict blocks, dict scope) excep
         object component = py_eval_expr(new_scope, block.header.args)
     if not isinstance(component, Component):
         raise ValueError(f"'{block.header.args}' should evaluate to a Component, got '{stringify_type(component)}'")
+    new_scope.update(component.__ghostwriter_component_scope__)
     new_scope['self'] = component
     # TODO: block.lines should be bound to 'body' somehow
     #       see dsl.py > dsl_eval_component > render_body
