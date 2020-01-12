@@ -106,6 +106,7 @@ setup(
         Extension("ghostwriter.utils.spec.spec", ["ghostwriter/utils/spec/spec.pyx"]),
         Extension("ghostwriter.utils.fhash.fhash", ["ghostwriter/utils/fhash/fhash.pyx"]),
         Extension("ghostwriter.utils.iwriter", ["ghostwriter/utils/iwriter.pyx"]),
+        Extension("ghostwriter.utils.ctext", ["ghostwriter/utils/ctext.pyx"]),
         Extension("ghostwriter.utils.template.tokens", ["ghostwriter/utils/template/tokens.pyx"]),
         Extension("ghostwriter.utils.cogen.tokenizer", ["ghostwriter/utils/cogen/tokenizer.pyx"]),
         Extension("ghostwriter.utils.cogen.interpreter", ["ghostwriter/utils/cogen/interpreter.pyx"]),
