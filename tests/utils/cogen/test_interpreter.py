@@ -30,6 +30,9 @@ def collect_testcase_examples(*testcases: progs.TestCase)\
     progs.if_elif_else,
     progs.for_block_simplest,
     progs.for_block_use_var,
+    progs.component_block_simplest,
+    progs.component_block_simple_var,
+    progs.component_block_simple_var_from_scope,
 ))
 def test_smth(case, example):
     print("start")

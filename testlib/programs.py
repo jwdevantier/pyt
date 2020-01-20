@@ -2,6 +2,7 @@ from typing import List, Any, Dict, Optional
 from ghostwriter.utils.cogen.parser import (
     CogenParser, Program, Literal, Expr, Line, CLine, Block, If,
 )
+from ghostwriter.utils.cogen.component import Component
 
 Scope = Dict[str, Any]
 Blocks = Dict[str, Any]
@@ -238,22 +239,108 @@ for_block_use_var = TestCase(
 )
 
 
-# TODO: need to embed / resolve components somehow (Add ComponentScope to examples)
-component_block = TestCase(
+class HelloWorldComponent(Component):
+    template = "hello, world"
+
+
+component_block_simplest = TestCase(
     "A sample component block",
     [
-        "%r MyFN(self.fn_name, self.fn_args)",
-        'print("hello, world")',
+        "%r MyComponent()",
         "%/r",
     ],
     Program([
         Block(
-            CLine('r', 'MyFN(self.fn_name, self.fn_args)'), [
-                Line([Literal('print("hello, world")')])
-            ])
-    ])
-    # TODO: missing examples
+            CLine('r', 'MyComponent()'), [])
+    ]),
+    Example(
+        '',
+        [
+            "hello, world\n"
+        ],
+        {
+            'MyComponent': HelloWorldComponent,
+        }
+    )
 )
+
+
+class HelloComponent(Component):
+    def __init__(self, thing):
+        self.thing = thing
+
+    template = "hello, <<self.thing>>"
+
+
+component_block_simple_var = TestCase(
+    "A sample component block using vars from arguments",
+    [
+        "%r MyComponent(name)",
+        "%/r",
+    ],
+    Program([
+        Block(
+            CLine('r', 'MyComponent(name)'), [])
+    ]),
+    Example(
+        '',
+        [
+            "hello, Arthur\n"
+        ],
+        {
+            'MyComponent': HelloComponent,
+            'name': 'Arthur'
+        }
+    ),
+    Example(
+        '',
+        [
+            "hello, Joan\n"
+        ],
+        {
+            'MyComponent': HelloComponent,
+            'name': 'Joan'
+        }
+    )
+)
+
+
+class HelloScopeVarComponent(Component):
+    template = "hello, <<thing>>"
+
+
+component_block_simple_var_from_scope = TestCase(
+    "A sample component block using var from inherited scope",
+    [
+        "%r MyComponent()",
+        "%/r",
+    ],
+    Program([
+        Block(
+            CLine('r', 'MyComponent()'), [])
+    ]),
+    Example(
+        '',
+        [
+            "hello, Arthur\n"
+        ],
+        {
+            'MyComponent': HelloScopeVarComponent,
+            'thing': 'Arthur'
+        }
+    ),
+    Example(
+        '',
+        [
+            "hello, Joan\n"
+        ],
+        {
+            'MyComponent': HelloScopeVarComponent,
+            'thing': 'Joan'
+        }
+    )
+)
+
 
 prog1 = TestCase(
     "A small program",

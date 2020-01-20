@@ -18,7 +18,9 @@ from testlib import programs as progs
     progs.if_elif_else,
     progs.for_block_simplest,
     progs.for_block_use_var,
-    progs.component_block,
+    progs.component_block_simplest,
+    progs.component_block_simple_var,
+    progs.component_block_simple_var_from_scope,
     progs.prog1,
 ])
 def test_parse_valid_progs(case):
