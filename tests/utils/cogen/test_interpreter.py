@@ -33,6 +33,7 @@ def collect_testcase_examples(*testcases: progs.TestCase)\
     progs.component_block_simplest,
     progs.component_block_simple_var,
     progs.component_block_simple_var_from_scope,
+    progs.component_block_w_body,
 ))
 def test_smth(case, example):
     print("start")

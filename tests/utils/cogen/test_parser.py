@@ -21,6 +21,7 @@ from testlib import programs as progs
     progs.component_block_simplest,
     progs.component_block_simple_var,
     progs.component_block_simple_var_from_scope,
+    progs.component_block_w_body,
     progs.prog1,
 ])
 def test_parse_valid_progs(case):

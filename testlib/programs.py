@@ -342,6 +342,40 @@ component_block_simple_var_from_scope = TestCase(
 )
 
 
+class StoryTimeComponent(Component):
+    template = """
+    ~~ one upon a time ~~
+    % body
+    ~~ the end ~~
+    """
+
+
+component_block_w_body = TestCase(
+    "A sample component block given a body",
+    [
+        "%r storytime()",
+        "there lived a woman in a hut",
+        "%/r",
+    ],
+    Program([
+        Block(
+            CLine('r', "storytime()"), [
+                Line([Literal("there lived a woman in a hut")])
+            ])
+    ]),
+    Example(
+        '',
+        [
+            "~~ one upon a time ~~",
+            "there lived a woman in a hut",
+            "~~ the end ~~\n"
+        ],
+        {
+            "storytime": StoryTimeComponent,
+        }
+    )
+)
+
 prog1 = TestCase(
     "A small program",
     [

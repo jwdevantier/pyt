@@ -272,6 +272,8 @@ cdef class CogenParser:
     cdef Node _parse_block_node(self, CLine header):
         if header.keyword == 'if':
             return self._parse_if_block(header)
+        elif header.keyword == 'body':
+            return Block(header)  # no body, no end-tag
         return self._parse_block(header)
 
     cdef CLine _parse_cline(self):

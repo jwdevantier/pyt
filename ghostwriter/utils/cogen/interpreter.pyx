@@ -99,41 +99,20 @@ def gen_loop_iterator(str stx, dict scope):
         code)
 
 
-cdef inline dict derived_scope(dict parent):
-    return parent.copy()
-
-
-cdef inline dict component_blocks(dict parent_blocks, object render_body):
-    """
-    
-    Parameters
-    ----------
-    parent_blocks
-        all blocks registered in the parent context
-    render_body
-        function which renders the body of the component if invoked.
-
-    Returns
-    -------
-        a new block context which retains all the registered blocks of the parent
-        and a special 'body' block which, if invoked, renders the body of the
-        component.
-    """
-    # TODO: render_body should, at least, be a one-method class for type enforcement reasons
-    cdef dict child_blocks = parent_blocks.copy()
-    child_blocks['body'] = render_body
-    return child_blocks
-
-
-cdef inline dict dict_merge(dict d1, dict ds, ...):
-    cdef dict out = d1.copy()
-    for dct in ds:
-        out.update(ds)
-    return out
-
-
 cdef inline str stringify_type(object o):
     return type(o).__name__
+
+
+cdef class BodyEnvironment:
+    cdef:
+        list lines
+        dict blocks
+        dict scope
+
+    def __init__(self, list lines, dict blocks, dict scope):
+        self.lines = lines
+        self.blocks = blocks
+        self.scope = scope
 
 
 cdef void interp_line(Line node, Writer w, dict blocks, dict scope) except *:
@@ -174,11 +153,15 @@ cdef void interp_component(Block block, Writer w, dict blocks, dict scope) excep
         raise RenderArgTypeError(block.header.args, component)
     new_scope.update(component.__ghostwriter_component_scope__)
     new_scope['self'] = component
-    # TODO: block.lines should be bound to 'body' somehow
-    #       see dsl.py > dsl_eval_component > render_body
-
-    # TODO: derive blocks with body -- bound to render body
+    new_blocks['body'] = BodyEnvironment(block.lines, blocks, new_scope)
     interpret(component.ast, w, new_blocks, new_scope)
+
+
+cdef void interp_body_block(Block body, Writer w, dict blocks, dict scope) except *:
+    cdef Node n
+    cdef BodyEnvironment b_env = blocks['body']
+    for n in b_env.lines:
+        interp_node(n, w, b_env.blocks, b_env.scope)
 
 
 cdef void interp_block(Block block, Writer w, dict blocks, dict scope) except *:
@@ -192,7 +175,9 @@ cdef void interp_block(Block block, Writer w, dict blocks, dict scope) except *:
         for loop_bindings in gen_loop_iterator(block.header.args, new_scope):
             new_scope.update(loop_bindings)  # TODO: find a means of testing this - vars changed in one iter should be carried over
             for n in block.lines:
-                interp_node(n, w, blocks, new_scope)
+                interp_node(<Node>n, w, blocks, new_scope)
+    elif block.header.keyword == "body":
+        interp_body_block(block, w, blocks, scope)
     else:
         raise RuntimeError(f"cannot handle '{block.header.keyword}' blocks yet")
 
