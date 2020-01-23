@@ -23,6 +23,10 @@ cdef class Token:
     cpdef public TokenType type
 
 
+cdef class CtrlToken(Token):
+    cpdef public str prefix
+
+
 cdef class TokenFactory:
     @staticmethod
     cdef Token eof()
@@ -37,7 +41,7 @@ cdef class TokenFactory:
     cdef Token literal(str lexeme)
 
     @staticmethod
-    cdef Token ctrl_kw(str lexeme)
+    cdef Token ctrl_kw(str lexeme, str prefix = ?)
 
     @staticmethod
     cdef Token ctrl_args(str lexeme)

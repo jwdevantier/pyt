@@ -71,6 +71,21 @@ cdef class Token:
         return f"({self.type}: {self.lexeme})"
 
 
+cdef class CtrlToken(Token):
+    def __init__(self, str lexeme, str prefix):
+        super().__init__(CTRL_KW, lexeme)
+        self.prefix = prefix
+
+    def __eq__(self, other):
+        return other.type == self.type and other.lexeme == self.lexeme and other.prefix == self.prefix
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __repr__(self):
+        return f"(x{self.type}: '{self.prefix} {self.lexeme}')"
+
+
 cdef:
     Token T_EOF = Token(EOF, '<EOF>')
     Token T_NEWLINE = Token(NEWLINE, '<NL>')
@@ -94,8 +109,8 @@ cdef class TokenFactory:
         return Token(LITERAL, lexeme)
 
     @staticmethod
-    cdef Token ctrl_kw(str lexeme):
-        return Token(CTRL_KW, lexeme)
+    cdef Token ctrl_kw(str lexeme, str prefix = ''):
+        return CtrlToken(lexeme, prefix)
 
     @staticmethod
     cdef Token ctrl_args(str lexeme):
@@ -123,8 +138,8 @@ cdef class PyTokenFactory:
         return TokenFactory.literal(lexeme)
 
     @staticmethod
-    def ctrl_kw(str lexeme):
-        return TokenFactory.ctrl_kw(lexeme)
+    def ctrl_kw(str lexeme, str prefix = ''):
+        return TokenFactory.ctrl_kw(lexeme, prefix)
 
     @staticmethod
     def ctrl_args(str lexeme):
@@ -168,6 +183,7 @@ cdef class Tokenizer:
             Py_ssize_t pos = self.pos
             Py_ssize_t start
             Py_ssize_t prog_len = self.prog_len
+            Py_ssize_t pos_prefix_start, pos_prefix_end
 
         if pos == self.prog_len:
             return T_EOF
@@ -192,6 +208,8 @@ cdef class Tokenizer:
                     (pos + 1) if buf[pos] == '%' else pos)
             else:
                 # => Start of CTRL line (CtrlKW)
+                pos_prefix_start = self.pos
+                pos_prefix_end = pos  # indentation/prefix of CTRL_KW is buf[self.pos:pos_prefix_end]
                 pos += 1 # skip past '%'
                 while pos != prog_len and iswblank(buf[pos]):
                     pos += 1
@@ -202,7 +220,8 @@ cdef class Tokenizer:
                     pos += 1
                 self.last = CTRL_KW
                 self.pos = pos
-                return TokenFactory.ctrl_kw(buf[start:pos])
+
+                return TokenFactory.ctrl_kw(buf[start:pos], buf[pos_prefix_start:pos_prefix_end])
         elif self.last == CTRL_KW:
             # => Ctrl args
             start = pos
