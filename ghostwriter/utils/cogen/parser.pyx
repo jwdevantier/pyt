@@ -1,6 +1,6 @@
 from typing import List
 from ghostwriter.utils.cogen.tokenizer cimport (
-    Token, Tokenizer, token_label,
+    Token, CtrlToken, Tokenizer, token_label,
     EOF, NEWLINE, EXPR, LITERAL, CTRL_KW, CTRL_ARGS
 )
 
@@ -130,22 +130,24 @@ cdef class Line(Node):
 
 
 cdef class CLine(Node):
-    def __init__(self, str keyword, str args = ''):
+    def __init__(self, str keyword, str args = '', str prefix = ''):
         super().__init__()
         self.keyword = keyword
         self.args = args
+        self.prefix = prefix
 
     def __eq__(self, other):
         return (
             isinstance(other, self.__class__)
             and self.keyword == other.keyword
-            and self.args == other.args)
+            and self.args == other.args
+            and self.prefix == other.prefix)
 
     def __repr__(self):
         if self.args:
-            return f"CLine({self.keyword}, {self.args})"
+            return f"CLine('{self.prefix}' '{self.keyword}', {self.args})"
         else:
-            return f"CLine({self.keyword})"
+            return f"CLine('{self.keyword}')"
 
 
 cdef:
@@ -280,17 +282,19 @@ cdef class CogenParser:
         cdef:
             CLine cline
             str keyword
+            str prefix
             Token tok = self.curr_token
         if tok.type != CTRL_KW:
             raise RuntimeError(f"Expected CTRL_KW({CTRL_KW}), got {token_label(tok.type)}({tok.type})")
         keyword = tok.lexeme
+        prefix = (<CtrlToken>tok).prefix
         tok = self.advance()
         if tok.type == CTRL_ARGS:
-            cline = CLine(keyword, tok.lexeme)
+            cline = CLine(keyword, tok.lexeme, prefix)
             self.advance()
             return cline
         else:
-            return CLine(keyword, '')
+            return CLine(keyword, '', prefix)
 
     cdef Line _parse_line(self):
         cdef:

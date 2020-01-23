@@ -52,6 +52,7 @@ cdef class Line(Node):
 cdef class CLine(Node):
     cpdef public str keyword
     cpdef public str args
+    cpdef public str prefix
 
 
 cdef class CogenParser:
