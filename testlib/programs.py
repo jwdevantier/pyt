@@ -112,7 +112,7 @@ line_lit_adv = TestCase(
 if_simplest = TestCase(
     "if-simplest",
     [
-        "%if x is not None",
+        "% if x is not None",
         "x is something",
         "%/if"
     ],
@@ -375,6 +375,109 @@ component_block_w_body = TestCase(
         }
     )
 )
+
+# TODO: showcase component calling function as part of transformation
+
+indent_if_block_to_ctrl_line = TestCase(
+    "show how an if-block's opening line determine base indentation of its children",
+    [
+        "hello",
+        "   % if True",
+        "if line 1",
+        "if line 2",
+        "%/if",
+        "world"
+    ],
+    Program([
+        Line([Literal("hello")]),
+        If([Block(CLine('if', 'True', prefix='   '), [
+            Line([Literal("if line 1")]),
+            Line([Literal("if line 2")])])]),
+        Line([Literal("world")])
+    ]),
+    Example(
+        '',
+        [
+            "hello",
+            "   if line 1",
+            "   if line 2",
+            "world\n"
+        ],
+        {}
+    )
+)
+
+
+indent_for_block_to_ctrl_line = TestCase(
+    "show how a for-block's opening line determine base indentation of its children",
+    [
+        "hello",
+        "   % for x in range(0,2)",
+        "line <<x>>",
+        "%/for",
+        "world"
+    ],
+    Program([
+        Line([Literal("hello")]),
+        Block(
+            CLine('for', 'x in range(0,2)', prefix='   '), [
+                Line([Literal("line "), Expr("x")])]),
+        Line([Literal("world")])
+    ]),
+    Example(
+        '',
+        [
+            "hello",
+            "   line 0",
+            "   line 1",
+            "world\n"
+        ],
+        {}
+    )
+)
+
+
+class IndentExampleComponent(Component):
+    template = """
+    before body
+       % body
+    after body
+    """
+
+
+indent_component_block_to_ctrl_line = TestCase(
+    "show how a component-block's opening line determine base indentation of its children",
+    [
+        "hello",
+        "   % r Example()",
+        "body line 1",
+        "body line 2",
+        "%/r",
+        "world"
+    ],
+    Program([
+        Line([Literal("hello")]),
+        Block(
+            CLine('r', 'Example()', prefix='   '), [
+                Line([Literal("body line 1")]),
+                Line([Literal("body line 2")])
+            ]),
+        Line([Literal("world")])
+    ]),
+    Example(
+        '',
+        [
+            "hello",
+            "   before body",
+            "      body line 1", # TODO: issue is that body contents are not indented.
+            "      body line 2",
+            "   after body",
+            "world\n"
+        ],
+        {'Example': IndentExampleComponent}
+    )
+)
+
 
 prog1 = TestCase(
     "A small program",

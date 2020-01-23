@@ -54,7 +54,7 @@ EOF = TokenFactory.eof()
      "%for ", [TokenFactory.ctrl_kw('for')]),
 
     ("control keyword - whitespace prefix",
-     "  %for ", [TokenFactory.ctrl_kw('for')]),
+     "  %for ", [TokenFactory.ctrl_kw('for', '  ')]),
 
     ("control keyword - whitespace between '%' and keyword",
      "% for ", [TokenFactory.ctrl_kw('for')]),

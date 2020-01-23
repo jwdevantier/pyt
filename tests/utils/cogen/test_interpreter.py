@@ -33,10 +33,12 @@ def collect_testcase_examples(*testcases: progs.TestCase)\
     progs.component_block_simplest,
     progs.component_block_simple_var,
     progs.component_block_simple_var_from_scope,
+    progs.indent_if_block_to_ctrl_line,
+    progs.indent_for_block_to_ctrl_line,
+    progs.indent_component_block_to_ctrl_line,
     progs.component_block_w_body,
 ))
 def test_smth(case, example):
-    print("start")
     buf: BufferWriter = BufferWriter()
     writer: Writer = Writer(buf)
     interpret(case.ast, writer, example.blocks, example.scope)
