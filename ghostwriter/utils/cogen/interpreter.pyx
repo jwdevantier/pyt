@@ -20,23 +20,28 @@ cdef class RenderArgTypeError(InterpreterError):
 cdef class Writer(IWriter):
     def __init__(self, IWriter writer, str prefix = ""):
         self._writer = writer
-        self._prefixes = []
-        self._base_prefix = self._curr_prefix = prefix
+        self._prefixes = [prefix]
+        self._curr_prefix = prefix
 
     cpdef void indent(self, str prefix):
-        cdef str indent = '\n' + self._base_prefix + prefix
-        self._prefixes.append(indent)
-        self._curr_prefix = indent
+        self._curr_prefix = self._curr_prefix + prefix
+        self._prefixes.append(self._curr_prefix)
 
     cpdef void dedent(self):
-        self._prefixes.pop()
-        self._curr_prefix = self._prefixes[-1]
+        if len(self._prefixes) > 1:
+            self._prefixes.pop()
+            self._curr_prefix = self._prefixes[-1]
+            return
+        self._curr_prefix = self._base_prefix
 
     cpdef void write(self, str contents):
         self._writer.write(contents)
 
-    cpdef void newline(self):
+    cpdef void write_indent(self):
         self._writer.write(self._curr_prefix)
+
+    cpdef void newline(self):
+        self._writer.write('\n')
 
 
 cdef py_eval_expr(dict scope, str expr):
@@ -118,6 +123,7 @@ cdef class BodyEnvironment:
 cdef void interp_line(Line node, Writer w, dict blocks, dict scope) except *:
     cdef Literal lit = None
     cdef Expr expr = None
+    w.write_indent()
     for n in node.contents:
         if isinstance(n, Literal):
             w.write((<Literal>n).value)
@@ -125,21 +131,24 @@ cdef void interp_line(Line node, Writer w, dict blocks, dict scope) except *:
             w.write(str(py_eval_expr(scope, (<Expr>n).value)))
         else:
             raise RuntimeError(f"Found node of type '{stringify_type(n)}' in Line.contents")
-    w.write('\n')
+    w.newline()
 
 
 cdef void interp_if(If ifblock, Writer w, dict blocks, dict scope) except *:
     cdef Block cond
+    w.indent((<Block>ifblock.conds[0]).header.prefix)
     for cond in ifblock.conds:
         if cond.header.keyword != 'else':
             # conditional
             if py_eval_expr(scope, cond.header.args):
                 for n in cond.lines:
                     interp_node(n, w, blocks, scope)
+                w.dedent()
                 return
         else:
             for n in cond.lines:
                 interp_node(n, w, blocks, scope)
+            w.dedent()
             return
 
 
@@ -166,9 +175,9 @@ cdef void interp_body_block(Block body, Writer w, dict blocks, dict scope) excep
 
 cdef void interp_block(Block block, Writer w, dict blocks, dict scope) except *:
     cdef dict new_scope
+    w.indent(block.header.prefix)
     if block.header.keyword == "r": # handle component
         interp_component(block, w, blocks, scope)
-        return
     elif block.header.keyword == "for": # handle for-block
         # TODO: assuming lexical scope here, OK?
         new_scope = scope.copy()
@@ -180,7 +189,7 @@ cdef void interp_block(Block block, Writer w, dict blocks, dict scope) except *:
         interp_body_block(block, w, blocks, scope)
     else:
         raise RuntimeError(f"cannot handle '{block.header.keyword}' blocks yet")
-
+    w.dedent()
 
 
 cdef void interp_node(Node n, Writer w, dict blocks, dict scope) except *:

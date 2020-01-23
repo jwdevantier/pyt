@@ -10,12 +10,12 @@ cdef class Writer(IWriter):
     cdef:
         IWriter _writer
         list _prefixes
-        str _base_prefix
         str _curr_prefix
 
     cpdef void indent(self, str prefix)
     cpdef void dedent(self)
     cpdef void write(self, str contents)
+    cpdef void write_indent(self)
     cpdef void newline(self)
 
 
