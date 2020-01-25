@@ -33,8 +33,10 @@ def collect_testcase_examples(*testcases: progs.TestCase)\
     progs.component_block_simplest,
     progs.component_block_simple_var,
     progs.component_block_simple_var_from_scope,
-    progs.indent_if_block_to_ctrl_line,
-    progs.indent_for_block_to_ctrl_line,
+    progs.indent_text_lines,
+    progs.indent_is_wysiwyg_if,
+    progs.indent_is_wysiwyg_for,
+    progs.indent_component_1,
     progs.indent_component_block_to_ctrl_line,
     progs.component_block_w_body,
 ))

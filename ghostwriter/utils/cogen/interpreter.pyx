@@ -136,19 +136,16 @@ cdef void interp_line(Line node, Writer w, dict blocks, dict scope) except *:
 
 cdef void interp_if(If ifblock, Writer w, dict blocks, dict scope) except *:
     cdef Block cond
-    w.indent((<Block>ifblock.conds[0]).header.prefix)
     for cond in ifblock.conds:
         if cond.header.keyword != 'else':
             # conditional
             if py_eval_expr(scope, cond.header.args):
                 for n in cond.lines:
                     interp_node(n, w, blocks, scope)
-                w.dedent()
                 return
         else:
             for n in cond.lines:
                 interp_node(n, w, blocks, scope)
-            w.dedent()
             return
 
 
@@ -163,19 +160,22 @@ cdef void interp_component(Block block, Writer w, dict blocks, dict scope) excep
     new_scope.update(component.__ghostwriter_component_scope__)
     new_scope['self'] = component
     new_blocks['body'] = BodyEnvironment(block.lines, blocks, new_scope)
+    w.indent(block.header.prefix)
     interpret(component.ast, w, new_blocks, new_scope)
+    w.dedent()
 
 
 cdef void interp_body_block(Block body, Writer w, dict blocks, dict scope) except *:
     cdef Node n
     cdef BodyEnvironment b_env = blocks['body']
+    w.indent(body.header.prefix)
     for n in b_env.lines:
         interp_node(n, w, b_env.blocks, b_env.scope)
+    w.dedent()
 
 
 cdef void interp_block(Block block, Writer w, dict blocks, dict scope) except *:
     cdef dict new_scope
-    w.indent(block.header.prefix)
     if block.header.keyword == "r": # handle component
         interp_component(block, w, blocks, scope)
     elif block.header.keyword == "for": # handle for-block
@@ -189,7 +189,6 @@ cdef void interp_block(Block block, Writer w, dict blocks, dict scope) except *:
         interp_body_block(block, w, blocks, scope)
     else:
         raise RuntimeError(f"cannot handle '{block.header.keyword}' blocks yet")
-    w.dedent()
 
 
 cdef void interp_node(Node n, Writer w, dict blocks, dict scope) except *:

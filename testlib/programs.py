@@ -378,8 +378,37 @@ component_block_w_body = TestCase(
 
 # TODO: showcase component calling function as part of transformation
 
-indent_if_block_to_ctrl_line = TestCase(
-    "show how an if-block's opening line determine base indentation of its children",
+indent_text_lines = TestCase(
+    "show how indentation among text lines is respected",
+    [
+        "   line 1",
+        "line 2",
+        "line 3",
+        "   line 4",
+        "      line 5",
+    ],
+    Program([
+        Line([Literal("   line 1")]),
+        Line([Literal("line 2")]),
+        Line([Literal("line 3")]),
+        Line([Literal("   line 4")]),
+        Line([Literal("      line 5")]),
+    ]),
+    Example(
+        '',
+        [
+            "   line 1",
+            "line 2",
+            "line 3",
+            "   line 4",
+            "      line 5\n",
+        ],
+        {}
+    )
+)
+
+indent_is_wysiwyg_if = TestCase(
+    "show how indentation is wysiwyg relative to the base indentation level",
     [
         "hello",
         "   % if True",
@@ -399,8 +428,8 @@ indent_if_block_to_ctrl_line = TestCase(
         '',
         [
             "hello",
-            "   if line 1",
-            "   if line 2",
+            "if line 1",
+            "if line 2",
             "world\n"
         ],
         {}
@@ -408,7 +437,7 @@ indent_if_block_to_ctrl_line = TestCase(
 )
 
 
-indent_for_block_to_ctrl_line = TestCase(
+indent_is_wysiwyg_for = TestCase(
     "show how a for-block's opening line determine base indentation of its children",
     [
         "hello",
@@ -428,11 +457,53 @@ indent_for_block_to_ctrl_line = TestCase(
         '',
         [
             "hello",
-            "   line 0",
-            "   line 1",
+            "line 0",
+            "line 1",
             "world\n"
         ],
         {}
+    )
+)
+
+
+class IndentExample1(Component):
+    template = """
+    before body
+    % body
+    after body
+    """
+
+
+indent_component_1 = TestCase(
+    "show how component children is indented by the indentation level of the component block",
+    [
+        "hello",
+        "   % r Example()",
+        "body line 1",
+        "      body line 2",
+        "%/r",
+        "world"
+    ],
+    Program([
+        Line([Literal("hello")]),
+        Block(
+            CLine('r', 'Example()', prefix='   '), [
+                Line([Literal("body line 1")]),
+                Line([Literal("      body line 2")])
+            ]),
+        Line([Literal("world")])
+    ]),
+    Example(
+        '',
+        [
+            "hello",
+            "   before body",
+            "   body line 1",
+            "         body line 2",
+            "   after body",
+            "world\n"
+        ],
+        {'Example': IndentExample1}
     )
 )
 
@@ -445,13 +516,14 @@ class IndentExampleComponent(Component):
     """
 
 
+# TODO: this is probably the hardest to grasp, but r-indent, body-indent and line-indent is all purely additive
 indent_component_block_to_ctrl_line = TestCase(
     "show how a component-block's opening line determine base indentation of its children",
     [
         "hello",
         "   % r Example()",
         "body line 1",
-        "body line 2",
+        "      body line 2",
         "%/r",
         "world"
     ],
@@ -460,7 +532,7 @@ indent_component_block_to_ctrl_line = TestCase(
         Block(
             CLine('r', 'Example()', prefix='   '), [
                 Line([Literal("body line 1")]),
-                Line([Literal("body line 2")])
+                Line([Literal("      body line 2")])
             ]),
         Line([Literal("world")])
     ]),
@@ -469,8 +541,8 @@ indent_component_block_to_ctrl_line = TestCase(
         [
             "hello",
             "   before body",
-            "      body line 1", # TODO: issue is that body contents are not indented.
-            "      body line 2",
+            "      body line 1",
+            "            body line 2",
             "   after body",
             "world\n"
         ],
