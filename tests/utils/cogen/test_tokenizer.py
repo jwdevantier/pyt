@@ -27,6 +27,19 @@ EOF = TokenFactory.eof()
          TokenFactory.literal("world")
      ]),
 
+    ("indented lines",
+     "   line 1\nline 2\nline 3\n   line 4\n      line 5", [
+        TokenFactory.literal("   line 1"),
+        NL,
+        TokenFactory.literal("line 2"),
+        NL,
+        TokenFactory.literal("line 3"),
+        NL,
+        TokenFactory.literal("   line 4"),
+        NL,
+        TokenFactory.literal("      line 5")
+     ]),
+
     # literals + exprs
     ("literal line with trailing expr",
      "hello <<world>>", [
@@ -78,7 +91,14 @@ EOF = TokenFactory.eof()
           TokenFactory.ctrl_kw('/foo')]),
 
     ("escaped control string (=> literal)",
-     "%% literal", [TokenFactory.literal('% literal')]),
+     "%% literal", [
+        TokenFactory.literal('%'),
+        TokenFactory.literal(' literal')]),
+
+    ("escaped control string with prefix (=> literal)",
+     "   %% literal", [
+        TokenFactory.literal('   %'),
+        TokenFactory.literal(' literal')]),
 
     ("small program",
      '\n'.join([

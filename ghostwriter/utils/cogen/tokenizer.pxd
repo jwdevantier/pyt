@@ -1,5 +1,6 @@
 # cython: language_level=3
 ctypedef Py_UNICODE wchar_t
+ctypedef Py_ssize_t TokenizerState
 ctypedef Py_ssize_t TokenType
 
 
@@ -11,6 +12,11 @@ cdef:
     TokenType CTRL_KW
     TokenType CTRL_ARGS
 
+
+cdef:
+    TokenizerState T_TOPLEVEL
+    TokenizerState T_LINE
+    TokenizerState T_CTRL_LINE
 
 cdef class Location:
     cdef:
@@ -56,10 +62,10 @@ cdef class Tokenizer:
         str prog
         Py_ssize_t prog_len
         wchar_t *buf
-        TokenType last
+        # TokenType last
+        TokenizerState state
         Py_ssize_t pos
 
-        Token _parse_literal(self, Py_ssize_t start)
     cpdef Token next(self)
     cpdef Location location(self)
 
