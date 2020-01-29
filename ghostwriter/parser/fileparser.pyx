@@ -3,8 +3,6 @@ from libc.stdlib cimport malloc, free, realloc
 from libc.string cimport memcpy
 from libc.locale cimport setlocale, LC_ALL
 from libc.stdio cimport (fopen, fclose, fwrite, fflush, feof, perror, FILE, fseek, fread)
-import tempfile
-from os.path import dirname as os_path_dirname, basename as os_path_basename
 from os import replace as os_replace, remove as os_remove
 import typing as t
 import logging
@@ -70,16 +68,19 @@ cdef class SnippetCallbackFn:
     cpdef void apply(self, Context ctx, str snippet, str prefix, IWriter fw) except *:
         pass
 
-
-cdef str tmp_file(str path, str suffix):
-    in_dir = os_path_dirname(path)
-    fname = f"{os_path_basename(path)}."
-
-    tf = tempfile.NamedTemporaryFile(
-        dir=in_dir, prefix=fname, suffix=suffix, delete=False)
-    fname = tf.name
-    tf.close()
-    return fname
+# https://cython.readthedocs.io/en/latest/src/tutorial/strings.html
+cdef char *str_py2char(char *cbuf, Py_ssize_t buflen, str pystring):
+    cdef char *ptr
+    cdef char *tmp
+    if len(pystring) + 1 > buflen:
+        ptr = <char *> realloc(cbuf, (len(pystring) + 1) * sizeof(char))
+    else:
+        ptr = cbuf
+    py_byte_string = pystring.encode('UTF-8')
+    tmp = py_byte_string
+    memcpy(ptr, tmp, buflen)
+    ptr[len(pystring)+1] = b'\0'
+    return ptr
 
 
 class GhostwriterError(Exception):
@@ -351,9 +352,9 @@ def post_process_noop(fpath_parsed: str):
 cdef class Parser:
     def __init__(
             self,
+            str temp_file_path: str,
             tag_open: str = '<@@', tag_close: str = '@@>',
             *,
-            temp_file_suffix: str = '.gw.tmp',
             object should_replace_file = None,
             object post_process = None,
             size_t buf_len_line = BUF_LINE_LEN,
@@ -364,14 +365,14 @@ cdef class Parser:
         if buf_len_line <= 0:
             raise ValueError("buf_len_line must be positive")
 
-        self.temp_file_suffix = temp_file_suffix
         self.should_replace_file = should_replace_file or should_replace_file_always
         self.post_process = post_process or post_process_noop
 
-        #self.tmp_file_path = CString(250)
-        self.tmp_file_path = cstr_new(250)
-        if self.tmp_file_path == NULL:
-            raise MemoryError("allocating tmp_file_path")
+        self.temp_file_path = temp_file_path
+        self.temp_file_path_ascii = <char *>malloc(len(temp_file_path) + 1)
+        if self.temp_file_path_ascii == NULL:
+            raise MemoryError("allocating temp_file_path_ascii")
+        self.temp_file_path_ascii = str_py2char(self.temp_file_path_ascii, len(temp_file_path) + 1, temp_file_path)
 
         # tag_open (e.g. '<@@')
         self.tag_open = cstr_new(len(tag_open))
@@ -414,13 +415,6 @@ cdef class Parser:
             raise MemoryError("allocating snippet indentation prefix")
 
     def reset(self, fpath: str):
-        # If overwriting the input file - generate a tempfile for output
-        cstr_reset(self.tmp_file_path)
-
-        # create temporary file in same directory
-        fpath_dst = tmp_file(fpath, self.temp_file_suffix)
-        if cstr_ncpy_unicode(self.tmp_file_path, fpath_dst, len(fpath_dst)) != 0:
-            raise MemoryError("failed to copy string to tmp_file_path")
 
         # Close input file if necessary
         if self.fh_in != NULL:
@@ -442,12 +436,10 @@ cdef class Parser:
             self.fh_out = NULL
 
         # Open output file
-        fname_dst_bs = fpath_dst.encode('UTF-8')
-        fh_out_str = fname_dst_bs
-        self.fh_out = fopen(fh_out_str, FILE_WRITE)
+        self.fh_out = fopen(self.temp_file_path_ascii, FILE_WRITE)
         if self.fh_out == NULL:
             # TODO: better error needed
-            raise RuntimeError(f"failed to open output file: '{fpath_dst}'")
+            raise RuntimeError(f"failed to open output file: '{self.temp_file_path}'")
 
         snippet_reset(self.snippet_start)
         snippet_reset(self.snippet_end)
@@ -463,8 +455,9 @@ cdef class Parser:
         if self.fh_out != NULL:
             fclose(self.fh_out)
 
-        if self.tmp_file_path != NULL:
-            cstr_free(self.tmp_file_path)
+        if self.temp_file_path_ascii != NULL:
+            free(self.temp_file_path_ascii)
+            self.temp_file_path_ascii = NULL
 
         if self.tag_open != NULL:
             cstr_free(self.tag_open)
@@ -487,7 +480,7 @@ cdef class Parser:
             "#Parser["
             "\n\tfh_in: {}, "
             "\n\tfh_out: {}, "
-            "\n\ttmp_file_path: {}, "
+            "\n\ttemp_file_path: {}, "
             "\n\ttag_open: {}, "
             "\n\ttag_close: {}, "
             "\n\tsnippet_start: {}, "
@@ -499,7 +492,7 @@ cdef class Parser:
         ).format(
             '<null FILE*>' if self.fh_in == NULL else 'FILE*',
             '<null FILE*>' if self.fh_out == NULL else 'FILE*',
-            cstr_repr(self.tmp_file_path),
+            self.temp_file_path,
             cstr_repr(self.tag_open),
             cstr_repr(self.tag_close),
             snippet_repr(self.snippet_start),
@@ -677,8 +670,8 @@ cdef class Parser:
                 fclose(self.fh_in)
                 self.fh_in = NULL
 
-            if parse_result == PARSE_OK and self.should_replace_file(self.tmp_file_path.ptr, fpath):
-                os_replace(self.post_process(self.tmp_file_path.ptr), fpath)
+            if parse_result == PARSE_OK and self.should_replace_file(self.temp_file_path, fpath):
+                os_replace(self.post_process(self.temp_file_path), fpath)
             else:
-                os_remove(self.tmp_file_path.ptr)
+                os_remove(self.temp_file_path)
         return parse_result

@@ -68,9 +68,9 @@ cdef class Parser:
     cdef object should_replace_file
     cdef object post_process
 
-    # buffer holding the name of the temporary file made iff
-    # input and eventual output file are the same (in-place writing)
-    cdef cstr *tmp_file_path
+    # the temporary file used before overwriting the input file or rejecting its contents
+    cdef str temp_file_path
+    cdef char* temp_file_path_ascii
 
     # buffers holding the literals identifying the tags
     # opening and ending a snippet (e.g. '<@@' and '@@>' respectively)
