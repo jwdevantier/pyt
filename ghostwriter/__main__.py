@@ -49,3 +49,8 @@ def compile(config, watch):
 # pass on control to click, passing all arguments along.
 if getattr(sys, 'frozen', False):
     cli(sys.argv[1:])
+
+
+# This allows running the program as a script by handing over control (and argument parsing) to click.
+if __name__ == '__main__':
+    cli()
