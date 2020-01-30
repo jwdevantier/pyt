@@ -90,6 +90,7 @@ cdef class Parser:
 
     cdef cstr *snippet_indent
 
+    cdef void reset(self, str fpath)
     cdef repr(self)
     cdef int cpy_snippet_indentation(self) nogil
     cdef int snippet_find(self, snippet* dst) nogil

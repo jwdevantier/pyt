@@ -414,7 +414,7 @@ cdef class Parser:
         if self.snippet_indent == NULL:
             raise MemoryError("allocating snippet indentation prefix")
 
-    def reset(self, fpath: str):
+    cdef void reset(self, str fpath):
 
         # Close input file if necessary
         if self.fh_in != NULL:
