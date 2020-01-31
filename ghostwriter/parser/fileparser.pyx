@@ -423,9 +423,7 @@ cdef class Parser:
         self.line_num = 0
 
         # Open input file
-        fpath_bs = fpath.encode('UTF-8')
-        fh_in_str = fpath_bs
-        self.fh_in = fopen(fh_in_str, FILE_READ)
+        self.fh_in = fopen(fpath.encode('UTF-8'), FILE_READ)
         if self.fh_in == NULL:
             raise FileNotFoundError(2, f"input file '{fpath}' not found")
 
