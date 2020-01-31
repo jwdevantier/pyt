@@ -172,17 +172,19 @@ class MPCompiler(MPScheduler):
     def _num_processes(self):
         return self.parser_conf.processes
 
-    def _target(self, jobs: mp.connection.Connection):
+    def _target(self, worker_id: str, jobs: mp.connection.Connection):
         sys.path.extend(self.parser_conf.search_paths)
         parser = Parser(
+            f"/tmp/.ghostwriter-w{worker_id}-{self.parser_conf.temp_file_suffix}",
             self.parser_conf.open, self.parser_conf.close,
-            temp_file_suffix=self.parser_conf.temp_file_suffix,
             should_replace_file=self.should_replace,
             post_process=resolv_opt(self.parser_conf.post_process_fn))
         fpath: str = jobs.recv()
+        expand_snippet = ExpandSnippet()
+        # with profiler(f"/tmp/{worker_id}"):
         while fpath != "<stop>":
             try:
-                out = parser.parse(ExpandSnippet(), fpath)
+                out = parser.parse(expand_snippet, fpath)
                 if out:
                     log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
                     log.error(f"in: {fpath}")
@@ -197,14 +199,15 @@ def do_compile_singlecore(parser_conf: ConfParser, walker: CompileWatcher,
                           should_replace: t.Callable[[str, str], bool]):
     sys.path.extend(parser_conf.search_paths)
     parser = Parser(
+        f"/tmp/.ghostwriter-w0-{parser_conf.temp_file_suffix}",
         parser_conf.open, parser_conf.close,
-        temp_file_suffix=parser_conf.temp_file_suffix,
         should_replace_file=should_replace,
         post_process=resolv_opt(parser_conf.post_process_fn))
     num_files_parsed = 0
+    expand_snippet = ExpandSnippet()
     for entry in compiler_input_files(walker, walker.root_path):
         try:
-            out = parser.parse(ExpandSnippet(), entry.path)
+            out = parser.parse(expand_snippet, entry.path)
             num_files_parsed += 1
             if out:
                 log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")

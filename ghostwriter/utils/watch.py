@@ -104,7 +104,7 @@ class MPScheduler(ABC):
     def _spawn_procs(self):
         assert self._procs == [], "cannot spawn before cleaning up old processes"
         for n in range(self.num_processes):
-            proc = Process(target=self._target, args=(self._pipe_rcv[n],), daemon=True)
+            proc = Process(target=self._target, args=(f"worker-{n}", self._pipe_rcv[n],), daemon=True)
             self._procs.append(proc)
             proc.start()
 
