@@ -95,7 +95,6 @@ cdef class Parser:
     cdef int cpy_snippet_indentation(self) nogil
     cdef int snippet_find(self, snippet* dst) nogil
     cdef int readline(self) nogil
-    cdef int writeline(self) nogil
     cdef expand_snippet(self, Context ctx)
     cdef unsigned int doparse(self, Context ctx) nogil except PARSE_EXCEPTION
 
