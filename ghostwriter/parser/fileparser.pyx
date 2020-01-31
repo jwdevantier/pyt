@@ -165,7 +165,7 @@ cdef int cstr_ncpy_unicode(cstr *self, unicode s, size_t n):
         wchar_t *src = s
     return cstr_ncpy_wchar(self, src, n)
 
-cdef void cstr_reset(cstr *self) nogil:
+cdef inline void cstr_reset(cstr *self) nogil:
     wmemset(self.ptr, '\0', 1)  # terminate "string"
     self.strlen = 0
 
@@ -225,7 +225,7 @@ cdef snippet *snippet_new(size_t bufsiz) nogil:
     self.line_num = 0
     return self
 
-cdef void snippet_reset(snippet *self) nogil:
+cdef inline void snippet_reset(snippet *self) nogil:
     cstr_reset(self.cstr)
     self.type = SNIPPET_NONE
     self.line_num = 0
@@ -235,7 +235,7 @@ cdef void snippet_free(snippet *self) nogil:
         cstr_free(self.cstr)
     free(self)
 
-cdef int snippet_cmp(snippet *lhs, snippet *rhs) nogil:
+cdef inline int snippet_cmp(snippet *lhs, snippet *rhs) nogil:
     return wcscmp(lhs.cstr.ptr, rhs.cstr.ptr)
 
 cdef unicode snippet_repr(snippet *self):
@@ -415,7 +415,6 @@ cdef class Parser:
             raise MemoryError("allocating snippet indentation prefix")
 
     cdef void reset(self, str fpath):
-
         # Close input file if necessary
         if self.fh_in != NULL:
             fclose(self.fh_in)
@@ -575,11 +574,6 @@ cdef class Parser:
         self.line_num += 1
         return READ_OK
 
-    cdef int writeline(self) nogil:
-        cdef:
-            wchar_t *line_ptr = self.line.ptr
-        return file_write(self.fh_out, self.encoder, line_ptr, self.line.strlen)
-
     cdef expand_snippet(self, Context ctx):
         cdef:
             wchar_t buf = '\0'
@@ -617,7 +611,7 @@ cdef class Parser:
                     return PARSE_READ_ERR
                 break
 
-            if self.writeline() != 0:
+            if file_write(self.fh_out, self.encoder, self.line.ptr, self.line.strlen) != 0:
                 return PARSE_WRITE_ERR
             # line written to new file - if not a snippet start - skip to next
             if self.snippet_find(self.snippet_start) != 0:
@@ -647,7 +641,7 @@ cdef class Parser:
 
                 with gil:
                     self.expand_snippet(ctx)
-                if self.writeline() != 0:
+                if file_write(self.fh_out, self.encoder, self.line.ptr, self.line.strlen) != 0:
                     return PARSE_WRITE_ERR
                 break  # Done, go back to outer state
         return PARSE_OK
