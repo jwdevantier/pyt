@@ -49,6 +49,10 @@ cdef class SnippetCallbackFn:
     cpdef void apply(self, Context ctx, str snippet, str prefix, IWriter fw) except *
 
 
+cdef class ShouldReplaceFileCallbackFn:
+    cpdef bint apply(self, str temp, str orig) except *
+
+
 cdef class FileWriter(IWriter):
     cdef FILE *out
     cdef wcsenc_t *encoder
@@ -65,7 +69,7 @@ cdef class Parser:
     cdef FILE *fh_out
 
     cdef str temp_file_suffix
-    cdef object should_replace_file
+    cdef ShouldReplaceFileCallbackFn should_replace_file
     cdef object post_process
 
     # the temporary file used before overwriting the input file or rejecting its contents

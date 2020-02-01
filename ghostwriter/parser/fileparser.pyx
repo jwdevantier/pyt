@@ -68,6 +68,27 @@ cdef class SnippetCallbackFn:
     cpdef void apply(self, Context ctx, str snippet, str prefix, IWriter fw) except *:
         pass
 
+
+cdef class ShouldReplaceFileCallbackFn:
+    cpdef bint apply(self, str temp, str orig) except *:
+        pass
+
+cdef class ShouldReplaceFileAlways(ShouldReplaceFileCallbackFn):
+    cpdef bint apply(self, str temp, str orig) except *:
+        # Strategy for determining if temporary file should overwrite the original
+        #
+        # Used by the parser when parsing files in 'in-place' mode, where a temporary
+        # file is created and at the end, the parser needs to determine if the result
+        # should overwrite the original.
+        # In some cases, such as when file contents are identical, you do not want
+        # to overwrite the file (and cause another change event to be processed in
+        # watch-mode).
+        return True
+
+
+cdef ShouldReplaceFileAlways should_replace_file_always = ShouldReplaceFileAlways()
+
+
 # https://cython.readthedocs.io/en/latest/src/tutorial/strings.html
 cdef char *str_py2char(char *cbuf, Py_ssize_t buflen, str pystring):
     cdef char *ptr
@@ -329,15 +350,6 @@ cdef enum:
     READ_ERR = 1
     READ_LINE_TOO_LONG = 2
 
-def should_replace_file_always(fpath_result: str, fpath_orig: str):
-    """
-    By default, the parser will query this function whether to replace the
-    parsed contents with its original to which the answer will always be
-    true.
-
-    Provide another strategy to abort circular parsing, for instance.
-    """
-    return True
 
 def post_process_noop(fpath_parsed: str):
     """
@@ -355,7 +367,7 @@ cdef class Parser:
             str temp_file_path: str,
             tag_open: str = '<@@', tag_close: str = '@@>',
             *,
-            object should_replace_file = None,
+            ShouldReplaceFileCallbackFn should_replace_file = None,
             object post_process = None,
             size_t buf_len_line = BUF_LINE_LEN,
             size_t buf_snippet_name_len = BUF_SNIPPET_NAME_LEN,
@@ -662,7 +674,7 @@ cdef class Parser:
                 fclose(self.fh_in)
                 self.fh_in = NULL
 
-            if parse_result == PARSE_OK and self.should_replace_file(self.temp_file_path, fpath):
+            if parse_result == PARSE_OK and self.should_replace_file.apply(self.temp_file_path, fpath):
                 os_replace(self.post_process(self.temp_file_path), fpath)
             else:
                 os_remove(self.temp_file_path)

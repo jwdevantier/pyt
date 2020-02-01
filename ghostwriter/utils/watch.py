@@ -2,7 +2,6 @@ from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
 from os import DirEntry
 from pathlib import Path
-from os.path import relpath
 import asyncio
 import signal
 import logging
@@ -13,10 +12,8 @@ import watchgod as wg
 import aiostream.stream.combine as stream
 from re import compile as re_compile
 from typing_extensions import Protocol
-from watchgod.watcher import AllWatcher
 
 from ghostwriter.utils import itools
-from ghostwriter.cli.conf import Configuration
 
 log = logging.getLogger(__name__)
 
@@ -35,44 +32,6 @@ class Watcher(Protocol):
 
     def should_watch_file(self, entry: DirEntry) -> bool:
         ...
-
-
-class CompileWatcher(AllWatcher):
-    def __init__(self, path: str, *, config: Configuration):
-        if config.parser.ignore_patterns:
-            self.ignore_file = or_pattern(config.parser.ignore_patterns)
-        else:
-            self.ignore_file = lambda _: None
-        self.include_file = or_pattern(config.parser.include_patterns)
-        if config.parser.ignore_dir_patterns:
-            self.ignore_dir = or_pattern(config.parser.ignore_dir_patterns)
-        else:
-            self.ignore_dir = lambda _: None
-        self.temp_file_suffix = config.parser.temp_file_suffix
-        super().__init__(path)
-
-    def should_watch_dir(self, entry: DirEntry) -> bool:
-        dir_path: str = relpath(entry.path, self.root_path)
-        return self.ignore_dir(dir_path) is None  # Should add dirs and subdirs here, too
-
-    def should_watch_file(self, entry: DirEntry) -> bool:
-        file_path: str = relpath(entry.path, self.root_path)
-        if file_path.endswith(self.temp_file_suffix) or self.ignore_file(file_path):
-            return False
-        return self.include_file(file_path) is not None
-
-
-class SearchPathsWatcher(AllWatcher):
-    IGNORED_DIRS = {'.git', '__pycache__', 'site-packages', 'env', 'venv', '.env', '.venv'}
-
-    def __init__(self, path: str):
-        super().__init__(path)
-
-    def should_watch_dir(self, entry: DirEntry) -> bool:
-        return entry.name not in self.IGNORED_DIRS
-
-    def should_watch_file(self, entry: DirEntry) -> bool:
-        return entry.name.endswith('.py')
 
 
 class MPScheduler(ABC):

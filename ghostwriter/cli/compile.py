@@ -6,33 +6,26 @@ import typing as t
 import multiprocessing as mp
 from multiprocessing import Process
 from time import time
-
 from watchgod.watcher import Change
 import colorama as clr
 
 from ghostwriter.parser import Parser, Context, GhostwriterSnippetError, SnippetCallbackFn
 import ghostwriter.parser as pparse
+from ghostwriter.parser.fileparser import ShouldReplaceFileCallbackFn, ShouldReplaceFileAlways
 from ghostwriter.utils.decorators import Debounce
 from ghostwriter.utils.iwriter import IWriter
-from ghostwriter.utils.fhash import file_hash
+from ghostwriter.utils.compile import FileSyncReplace, FileChecksums
 
-from ghostwriter.utils.watch import Watcher, SearchPathsWatcher, CompileWatcher, MPScheduler, watch_dirs, WatcherConfig
+from ghostwriter.utils.watch import Watcher, MPScheduler, watch_dirs, WatcherConfig
+from ghostwriter.utils.cwatch import CompileWatcher, SearchPathsWatcher, xcompiler_input_files
 from ghostwriter.cli.conf import Configuration, ConfParser
 from ghostwriter.utils.resolv import resolv, resolv_opt
+from ghostwriter.utils.profile import profiler
 
 log = logging.getLogger(__name__)
 
 CompileFn = t.Callable[[], None]
 Changeset = t.Set[t.Tuple[Change, str]]
-
-
-def compiler_input_files(w: Watcher, path: str) -> t.Iterator[os.DirEntry]:
-    for entry in os.scandir(path):
-        if entry.is_dir():
-            if w.should_watch_dir(entry):
-                yield from compiler_input_files(w, entry.path)
-        elif w.should_watch_file(entry):
-            yield entry
 
 
 def parse_snippet_name(snippet_fqn: str) -> t.Tuple[str, str]:
@@ -89,48 +82,48 @@ class ExpandSnippet(SnippetCallbackFn):
             raise SnippetUnhandledExceptionError(snippet) from e
 
 
-class FileChecksums:
-    def __init__(self):
-        self.fmap: t.Dict[str, str] = {}
-
-    def should_replace(self, temp: str, orig: str) -> bool:
-        new_hash = file_hash(temp)
-        if orig not in self.fmap:
-            orig_hash = file_hash(orig)
-            self.fmap[orig] = orig_hash
-        else:
-            orig_hash = self.fmap[orig]
-        # replace file iff. contents have changed from the parsing
-        return orig_hash != new_hash
-
-    def sync(self, changeset: Changeset) -> t.Iterator[t.Tuple[Change, str]]:
-        """Lazily synchronizes file checksums based on incoming changeset
-
-        Parameters
-        ----------
-        changeset : Changeset
-            Changes detected by the file system watcher represented as a set
-            of 2-tuples of change-type (added, modified, deleted) and the file
-            path.
-
-        Returns
-        -------
-            Iterator for sync operation. Genuine changes (where files are
-            modified) are returned.
-        """
-        fmap = self.fmap
-        for typ, fpath in changeset:
-            if typ == Change.modified:
-                new_hash = file_hash(fpath)
-                old_hash = fmap.get(fpath, None)
-                if new_hash != old_hash:
-                    fmap[fpath] = new_hash
-                    yield typ, fpath
-            elif typ == Change.added:
-                fmap[fpath] = file_hash(fpath)
-                yield typ, fpath
-            elif typ == Change.deleted:
-                fmap.pop(fpath, None)
+# class FileChecksums:
+#     def __init__(self):
+#         self.fmap: t.Dict[str, str] = {}
+#
+#     def should_replace(self, temp: str, orig: str) -> bool:
+#         new_hash = file_hash(temp)
+#         if orig not in self.fmap:
+#             orig_hash = file_hash(orig)
+#             self.fmap[orig] = orig_hash
+#         else:
+#             orig_hash = self.fmap[orig]
+#         # replace file iff. contents have changed from the parsing
+#         return orig_hash != new_hash
+#
+#     def sync(self, changeset: Changeset) -> t.Iterator[t.Tuple[Change, str]]:
+#         """Lazily synchronizes file checksums based on incoming changeset
+#
+#         Parameters
+#         ----------
+#         changeset : Changeset
+#             Changes detected by the file system watcher represented as a set
+#             of 2-tuples of change-type (added, modified, deleted) and the file
+#             path.
+#
+#         Returns
+#         -------
+#             Iterator for sync operation. Genuine changes (where files are
+#             modified) are returned.
+#         """
+#         fmap = self.fmap
+#         for typ, fpath in changeset:
+#             if typ == Change.modified:
+#                 new_hash = file_hash(fpath)
+#                 old_hash = fmap.get(fpath, None)
+#                 if new_hash != old_hash:
+#                     fmap[fpath] = new_hash
+#                     yield typ, fpath
+#             elif typ == Change.added:
+#                 fmap[fpath] = file_hash(fpath)
+#                 yield typ, fpath
+#             elif typ == Change.deleted:
+#                 fmap.pop(fpath, None)
 
 
 def print_snippet_error(e: GhostwriterSnippetError) -> None:
@@ -205,28 +198,16 @@ def do_compile_singlecore(parser_conf: ConfParser, walker: CompileWatcher,
         post_process=resolv_opt(parser_conf.post_process_fn))
     num_files_parsed = 0
     expand_snippet = ExpandSnippet()
-    for entry in compiler_input_files(walker, walker.root_path):
+    for entry in xcompiler_input_files(walker, walker.root_path):
         try:
-            out = parser.parse(expand_snippet, entry.path)
+            out = parser.parse(expand_snippet, entry)
             num_files_parsed += 1
             if out:
                 log.error(f"parse() => {out} ({pparse.parse_result_err(out)})")
-                log.error(f"in: {entry.path}")
+                log.error(f"in: {entry}")
         except GhostwriterSnippetError as e:
             print_snippet_error(e)
     log.info(f"parsed {num_files_parsed} files during compile pass")
-
-
-def should_always_replace(tmp: str, orig: str):
-    """Strategy for determining if temporary file should overwrite the original
-
-    Used by the parser when parsing files in 'in-place' mode, where a temporary
-    file is created and at the end, the parser needs to determine if the result
-    should overwrite the original.
-    In some cases, such as when file contents are identical, you do not want
-    to overwrite the file (and cause another change event to be processed in
-    watch-mode)."""
-    return True
 
 
 # TODO: (enhance) single-shot compiling should not make fdb but should just overwrite files
@@ -236,7 +217,7 @@ def compile(config: Configuration, watch: bool) -> None:
     fdb: t.Optional[FileChecksums] = None
     if watch:
         fdb = FileChecksums()
-    should_replace: t.Callable[[str, str], bool] = fdb.should_replace if fdb else should_always_replace
+    should_replace: ShouldReplaceFileCallbackFn = FileSyncReplace(fdb) if fdb else ShouldReplaceFileAlways()
 
     if config.parser.processes == 1:
         log.info("Single-core compile mode selected (change config.parser.processes to enable MP)")
@@ -258,7 +239,7 @@ def compile(config: Configuration, watch: bool) -> None:
             nonlocal walker, sched
             t_start = time()
             with sched as s:
-                njobs = s.submit((entry.path for entry in compiler_input_files(walker, root_path)))
+                njobs = s.submit(xcompiler_input_files(walker, root_path))
             log.info("compile pass: {0} jobs in {1:.2f}s".format(njobs, time() - t_start))
 
         compilefn = compile_mp
