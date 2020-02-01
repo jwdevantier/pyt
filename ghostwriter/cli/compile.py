@@ -17,7 +17,7 @@ from ghostwriter.utils.iwriter import IWriter
 from ghostwriter.utils.compile import FileSyncReplace, FileChecksums
 
 from ghostwriter.utils.watch import Watcher, MPScheduler, watch_dirs, WatcherConfig
-from ghostwriter.utils.cwatch import CompileWatcher, SearchPathsWatcher, xcompiler_input_files
+from ghostwriter.utils.cwatch import CompileWatcher, SearchPathsWatcher, compiler_input_files
 from ghostwriter.cli.conf import Configuration, ConfParser
 from ghostwriter.utils.resolv import resolv, resolv_opt
 from ghostwriter.utils.profile import profiler
@@ -198,7 +198,7 @@ def do_compile_singlecore(parser_conf: ConfParser, walker: CompileWatcher,
         post_process=resolv_opt(parser_conf.post_process_fn))
     num_files_parsed = 0
     expand_snippet = ExpandSnippet()
-    for entry in xcompiler_input_files(walker, walker.root_path):
+    for entry in compiler_input_files(walker, walker.root_path):
         try:
             out = parser.parse(expand_snippet, entry)
             num_files_parsed += 1
@@ -239,7 +239,7 @@ def compile(config: Configuration, watch: bool) -> None:
             nonlocal walker, sched
             t_start = time()
             with sched as s:
-                njobs = s.submit(xcompiler_input_files(walker, root_path))
+                njobs = s.submit(compiler_input_files(walker, root_path))
             log.info("compile pass: {0} jobs in {1:.2f}s".format(njobs, time() - t_start))
 
         compilefn = compile_mp

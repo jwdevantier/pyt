@@ -54,3 +54,15 @@ cdef class FileChecksums:
                 yield typ, fpath
             elif typ == Change.deleted:
                 fmap.pop(fpath, None)
+
+
+# def xcompiler_input_files(AllWatcher w, path: str):
+#     for entry in scandir(path):
+#         if entry.is_dir():
+#             if w.should_watch_dir(entry):
+#                 yield from compiler_input_files(w, entry.path)
+#         elif w.should_watch_file(entry):
+#             yield entry.path
+
+cdef class Compile:
+    pass
