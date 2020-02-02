@@ -2,12 +2,14 @@
 from libc.stdlib cimport malloc, free, realloc
 from libc.string cimport memcpy
 from libc.locale cimport setlocale, LC_ALL
-from libc.stdio cimport (fopen, fclose, fwrite, fflush, feof, perror, FILE, fseek, fread)
+from libc.stdio cimport (fopen, fclose, fwrite, fflush, feof, perror, FILE, fseek, SEEK_SET)
+from posix.stdio cimport (ftello, fileno)
+from posix.unistd cimport (ftruncate)
 from os import replace as os_replace, remove as os_remove
-import typing as t
 import logging
 import colorama as clr
 from ghostwriter.utils.iwriter cimport IWriter
+
 
 log = logging.getLogger(__name__)
 
@@ -373,6 +375,7 @@ cdef class Parser:
             size_t buf_snippet_name_len = BUF_SNIPPET_NAME_LEN,
             size_t buf_indent_by_len = BUF_INDENT_BY_LEN):
         self.fh_in = self.fh_out = NULL
+        self.expanded_snippet = False
 
         if buf_len_line <= 0:
             raise ValueError("buf_len_line must be positive")
@@ -433,22 +436,22 @@ cdef class Parser:
             self.fh_in = NULL
 
         self.line_num = 0
+        self.expanded_snippet = False
 
         # Open input file
         self.fh_in = fopen(fpath.encode('UTF-8'), FILE_READ)
         if self.fh_in == NULL:
             raise FileNotFoundError(2, f"input file '{fpath}' not found")
 
-        # Close output file if necessary
+        # Make/reuse template file
         if self.fh_out != NULL:
-            fclose(self.fh_out)
-            self.fh_out = NULL
-
-        # Open output file
-        self.fh_out = fopen(self.temp_file_path_ascii, FILE_WRITE)
-        if self.fh_out == NULL:
-            # TODO: better error needed
-            raise RuntimeError(f"failed to open output file: '{self.temp_file_path}'")
+            if fseek(self.fh_out, 0, SEEK_SET) != 0:
+                raise RuntimeError("seek failed")
+        else:
+            self.fh_out = fopen(self.temp_file_path_ascii, FILE_WRITE)
+            if self.fh_out == NULL:
+                # TODO: better error needed
+                raise RuntimeError(f"failed to open output file: '{self.temp_file_path}'")
 
         snippet_reset(self.snippet_start)
         snippet_reset(self.snippet_end)
@@ -463,6 +466,12 @@ cdef class Parser:
             fclose(self.fh_in)
         if self.fh_out != NULL:
             fclose(self.fh_out)
+
+        # Remove temporary file (if any)
+        try:
+            os_remove(self.temp_file_path)
+        except:
+            pass
 
         if self.temp_file_path_ascii != NULL:
             free(self.temp_file_path_ascii)
@@ -609,7 +618,7 @@ cdef class Parser:
             if not fw.got_newline:
                 file_write(self.fh_out, self.encoder, &NEWLINE, 1)
 
-    cdef unsigned int doparse(self, Context ctx) nogil except PARSE_EXCEPTION:
+    cdef PARSE_RES doparse(self, Context ctx) nogil except PARSE_EXCEPTION:
         cdef int read_status = READ_OK
         setlocale(LC_ALL, "UTF-8")
         while True:
@@ -651,12 +660,13 @@ cdef class Parser:
 
                 with gil:
                     self.expand_snippet(ctx)
+                self.expanded_snippet = True
                 if file_write(self.fh_out, self.encoder, self.line.ptr, self.line.strlen) != 0:
                     return PARSE_WRITE_ERR
                 break  # Done, go back to outer state
         return PARSE_OK
 
-    cpdef unsigned int parse(self, SnippetCallbackFn cb: SnippetCallbackFn, str fpath: str):
+    cpdef PARSE_RES parse(self, SnippetCallbackFn cb: SnippetCallbackFn, str fpath: str):
         cdef:
             Context ctx = Context(cb, fpath)
             PARSE_RES parse_result = PARSE_EXCEPTION
@@ -667,15 +677,17 @@ cdef class Parser:
         finally:
             if fflush(self.fh_out) != 0:
                 raise GhostwriterError("flushing output failed!")
-            if self.fh_out != NULL:
-                fclose(self.fh_out)
-                self.fh_out = NULL
             if self.fh_in != NULL:
                 fclose(self.fh_in)
                 self.fh_in = NULL
 
-            if parse_result == PARSE_OK and self.should_replace_file.apply(self.temp_file_path, fpath):
+            if parse_result == PARSE_OK and self.expanded_snippet and self.should_replace_file.apply(self.temp_file_path, fpath):
+                # truncate file because the file may have been used for many iterations now,
+                # some of which may have written more data than this particular file.
+                if ftruncate(fileno(self.fh_out), ftello(self.fh_out)) != 0:
+                    raise GhostwriterError("failed to truncate file")
+                if self.fh_out != NULL:
+                    fclose(self.fh_out)
+                    self.fh_out = NULL
                 os_replace(self.post_process(self.temp_file_path), fpath)
-            else:
-                os_remove(self.temp_file_path)
             return parse_result

@@ -84,7 +84,7 @@ cdef class Parser:
     cdef FILE *fh_in
     cdef FILE *fh_out
 
-    cdef str temp_file_suffix
+    cdef bint expanded_snippet
     cdef ShouldReplaceFileCallbackFn should_replace_file
     cdef object post_process
 
