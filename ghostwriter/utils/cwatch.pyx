@@ -1,9 +1,10 @@
 from os import scandir
+from os.path import relpath
 from re import compile as re_compile
+from multiprocessing import Pipe, Process
 from watchgod.watcher import Change
 from ghostwriter.cli.conf import Configuration
-from os.path import relpath
-
+from ghostwriter.utils import itools
 
 
 def or_pattern(patterns: list):
@@ -95,10 +96,61 @@ cdef class SearchPathsWatcher(AllWatcher):
         return entry.name.endswith('.py')
 
 
-def compiler_input_files(AllWatcher w, path: str):
-    for entry in scandir(path):
-        if entry.is_dir():
-            if w.should_watch_dir(entry):
-                yield from compiler_input_files(w, entry.path)
-        elif w.should_watch_file(entry):
-            yield entry.path
+cdef class MPScheduler:
+    def __init__(self, int num_processes):
+        self._pipe_snd = []
+        self._pipe_rcv = []
+        self._procs = []
+        self.num_processes = num_processes
+        self._next_pipe_ndx = 0
+
+        for n in range(self.num_processes):
+            snd, rcv = Pipe()
+            self._pipe_snd.append(snd)
+            self._pipe_rcv.append(rcv)
+
+    cpdef void _target(self, str worker_id, object jobs: Connection):
+        """the starting point of the worker process"""
+        pass
+
+    cdef void _spawn_procs(self):
+        cdef int n
+        assert self._procs == [], "cannot spawn before cleaning up old processes"
+        for n in range(self.num_processes):
+            proc = Process(target=self._target, args=(f"worker-{n}", self._pipe_rcv[n],), daemon=True)
+            self._procs.append(proc)
+            proc.start()
+
+    cdef void _kill_procs(self):
+        for fn in itools.join(
+                (lambda: p.send("<stop>") for p in self._pipe_snd),
+                (p.join for p in self._procs)):
+            try:
+                fn()
+            except:
+                pass
+        self._procs = []
+
+    def close(self) -> None:
+        self._kill_procs()
+        for fn in itools.join((p.close for p in self._pipe_rcv), (p.close for p in self._pipe_snd)):
+            try:
+                fn()
+            except:
+                pass
+
+    def __enter__(self):
+        self._spawn_procs()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._kill_procs()
+
+    cpdef void submit_one(self, object item):
+        cdef int _next_pipe_ndx = self._next_pipe_ndx
+        self._pipe_snd[_next_pipe_ndx].send(item)
+        _next_pipe_ndx += 1
+        if _next_pipe_ndx == self.num_processes:
+            self._next_pipe_ndx = 0
+        else:
+            self._next_pipe_ndx = _next_pipe_ndx

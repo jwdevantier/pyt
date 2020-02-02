@@ -25,23 +25,16 @@ dist/**
 build/**
 
 # cython - specific libraries
-ghostwriter/parser/fileparser.c
-ghostwriter/parser/*.html
-
+ghostwriter/parser/*.c
 ghostwriter/utils/spec/*.c
-ghostwriter/utils/spec/*html
-
-ghostwriter/utils/fhash/*.c
-ghostwriter/utils/fhash/*html
-
 ghostwriter/utils/template/*.c
-ghostwriter/utils/template/*.html
-
 ghostwriter/utils/cogen/*.c
-ghostwriter/utils/cogen/*.html
 
-ghostwriter/utils/iwriter.c
-ghostwriter/utils/iwriter.html
-
+ghostwriter/utils/compile.c
 ghostwriter/utils/ctext.c
-ghostwriter/utils/ctext.html
+ghostwriter/utils/cwatch.c
+ghostwriter/utils/fhash.c
+ghostwriter/utils/iwriter.c
+
+
+ghostwriter/**/*.html

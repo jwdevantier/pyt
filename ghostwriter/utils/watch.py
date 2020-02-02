@@ -1,28 +1,14 @@
-from multiprocessing import Pipe, Process
-from multiprocessing.connection import Connection
 from os import DirEntry
 from pathlib import Path
 import asyncio
 import signal
 import logging
 import typing as t
-from abc import ABC, abstractmethod
-
 import watchgod as wg
 import aiostream.stream.combine as stream
-from re import compile as re_compile
 from typing_extensions import Protocol
 
-from ghostwriter.utils import itools
-
 log = logging.getLogger(__name__)
-
-Matcher = t.Callable[[t.Any], t.Optional[t.Match[t.AnyStr]]]
-
-
-def or_pattern(patterns: t.Iterable[str]) -> Matcher:
-    """Compile pattern matching any of the regex strings in `patterns`."""
-    return re_compile('|'.join(f'(?:{entry})' for entry in patterns)).match
 
 
 class Watcher(Protocol):
@@ -32,73 +18,6 @@ class Watcher(Protocol):
 
     def should_watch_file(self, entry: DirEntry) -> bool:
         ...
-
-
-class MPScheduler(ABC):
-    def __init__(self):
-        self._pipe_snd: t.List[Connection] = []
-        self._pipe_rcv: t.List[Connection] = []
-        self._procs: t.List[Process] = []
-
-        for n in range(self.num_processes):
-            snd, rcv = Pipe()
-            self._pipe_snd.append(snd)
-            self._pipe_rcv.append(rcv)
-
-    @abstractmethod
-    def _target(self, jobs: Connection):
-        """the starting point of the worker process"""
-        ...
-
-    @property
-    def num_processes(self):
-        """return number of processes to have in pool"""
-        return self._num_processes()
-
-    @abstractmethod
-    def _num_processes(self) -> int:
-        """return number of processes to have in pool"""
-        ...
-
-    def _spawn_procs(self):
-        assert self._procs == [], "cannot spawn before cleaning up old processes"
-        for n in range(self.num_processes):
-            proc = Process(target=self._target, args=(f"worker-{n}", self._pipe_rcv[n],), daemon=True)
-            self._procs.append(proc)
-            proc.start()
-
-    def _kill_procs(self):
-        for fn in itools.join(
-                (lambda: p.send("<stop>") for p in self._pipe_snd),
-                (p.join for p in self._procs)):
-            try:
-                fn()
-            except:
-                pass
-        self._procs = []
-
-    def close(self):
-        self._kill_procs()
-        for fn in itools.join((p.close for p in self._pipe_rcv), (p.close for p in self._pipe_snd)):
-            try:
-                fn()
-            except:
-                pass
-
-    def __enter__(self):
-        self._spawn_procs()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._kill_procs()
-
-    def submit(self, work: t.Iterable[t.Any]) -> int:
-        pipes = itools.cycle(self._pipe_snd)
-        jobs = 0
-        for item in work:
-            next(pipes).send(item)
-            jobs += 1
-        return jobs
 
 
 async def iter_all(*aiters: t.AsyncIterator):

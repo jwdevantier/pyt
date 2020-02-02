@@ -53,6 +53,22 @@ cdef class ShouldReplaceFileCallbackFn:
     cpdef bint apply(self, str temp, str orig) except *
 
 
+cdef class ShouldReplaceFileAlways(ShouldReplaceFileCallbackFn):
+    pass
+
+
+cdef class GhostwriterError(Exception):
+    pass
+
+
+cdef class GhostwriterSnippetError(GhostwriterError):
+    cdef public str snippet_name
+    cdef public int line_num
+    cdef public str file
+    cdef public dict environment
+    cdef public str reason
+
+
 cdef class FileWriter(IWriter):
     cdef FILE *out
     cdef wcsenc_t *encoder
@@ -94,13 +110,14 @@ cdef class Parser:
 
     cdef cstr *snippet_indent
 
-    cdef void reset(self, str fpath)
+    cdef void reset(self, str fpath) except *
     cdef repr(self)
     cdef int cpy_snippet_indentation(self) nogil
     cdef int snippet_find(self, snippet* dst) nogil
     cdef int readline(self) nogil
     cdef expand_snippet(self, Context ctx)
-    cdef unsigned int doparse(self, Context ctx) nogil except PARSE_EXCEPTION
+    cdef PARSE_RES doparse(self, Context ctx) nogil except PARSE_EXCEPTION
+    cpdef PARSE_RES parse(self, SnippetCallbackFn cb: SnippetCallbackFn, str fpath: str)
 
 
 cdef class Context:

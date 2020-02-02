@@ -104,10 +104,10 @@ cdef char *str_py2char(char *cbuf, Py_ssize_t buflen, str pystring):
     return ptr
 
 
-class GhostwriterError(Exception):
+cdef class GhostwriterError(Exception):
     pass
 
-class GhostwriterSnippetError(GhostwriterError):
+cdef class GhostwriterSnippetError(GhostwriterError):
     def __init__(self,
                  snippet_name: str,
                  line_num: int,
@@ -426,7 +426,7 @@ cdef class Parser:
         if self.snippet_indent == NULL:
             raise MemoryError("allocating snippet indentation prefix")
 
-    cdef void reset(self, str fpath):
+    cdef void reset(self, str fpath) except *:
         # Close input file if necessary
         if self.fh_in != NULL:
             fclose(self.fh_in)
@@ -609,7 +609,7 @@ cdef class Parser:
             if not fw.got_newline:
                 file_write(self.fh_out, self.encoder, &NEWLINE, 1)
 
-    cdef PARSE_RES doparse(self, Context ctx) nogil except PARSE_EXCEPTION:
+    cdef unsigned int doparse(self, Context ctx) nogil except PARSE_EXCEPTION:
         cdef int read_status = READ_OK
         setlocale(LC_ALL, "UTF-8")
         while True:
@@ -656,10 +656,10 @@ cdef class Parser:
                 break  # Done, go back to outer state
         return PARSE_OK
 
-    def parse(self, SnippetCallbackFn cb: SnippetCallbackFn, str fpath: str) -> PARSE_RES:
+    cpdef unsigned int parse(self, SnippetCallbackFn cb: SnippetCallbackFn, str fpath: str):
         cdef:
             Context ctx = Context(cb, fpath)
-            size_t parse_result = PARSE_EXCEPTION
+            PARSE_RES parse_result = PARSE_EXCEPTION
         self.reset(fpath)
 
         try:
@@ -678,4 +678,4 @@ cdef class Parser:
                 os_replace(self.post_process(self.temp_file_path), fpath)
             else:
                 os_remove(self.temp_file_path)
-        return parse_result
+            return parse_result

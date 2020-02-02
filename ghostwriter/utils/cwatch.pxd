@@ -1,4 +1,5 @@
 # cython: language_level=3
+from multiprocessing.connection import Connection
 ctypedef object DirEntry
 
 
@@ -24,3 +25,16 @@ cdef class CompileWatcher(AllWatcher):
 
 cdef class SearchPathsWatcher(AllWatcher):
     pass
+
+
+cdef class MPScheduler:
+    cdef list _pipe_snd  # List[Connection]
+    cdef list _pipe_rcv  # List[Connection]
+    cdef list _procs  # List[Process]
+    cdef int num_processes
+    cdef int _next_pipe_ndx
+
+    cpdef void _target(self, str worker_id, object jobs: Connection)
+    cdef void _spawn_procs(self)
+    cdef void _kill_procs(self)
+    cpdef void submit_one(self, object item)
