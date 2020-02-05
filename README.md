@@ -33,9 +33,17 @@ mkdocs serve
 ```
 
 ## Profiling
+For profiling, [pyinstrument](https://github.com/joerick/pyinstrument) and [cprofile](https://docs.python.org/3.7/library/profile.html)
+are the standard. cprofile is a c-powered variant of `profile`, and both are included in the Python distribution.
+Pyinstrument, however, is available as a Python package.
 
-For Cython code, [pyinstrument](https://github.com/joerick/pyinstrument) will not work.
-Therefore cProfile is a better choice.
+Pyinstrument is arguably more user-friendly, the following will profile the application and produce a HTML page which
+allows you to drill down into where the program spent its time:
+```
+pyinstrument -r html $HOME/repos/personal/pyt/ghostwriter/__main__.py compile
+```
+
+However, for Cython code, `pyinstrument` will not work, Therefore, cProfile is a better choice in this case.
 
 ### Gotchas
 * In Cython, special instructions must be added to the file to enable profiling
