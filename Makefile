@@ -8,7 +8,7 @@ help:
 
 
 .PHONY: clean
-clean: clean-py clean-build ## clean all temporary files
+clean: clean-py clean-build clean-cython ## clean all temporary files
 	# this file must exist to disambiguate different test files with
 	# the same basename (i.e. filename)
 	touch tests/__init__.py
@@ -24,6 +24,10 @@ clean-py: ## remove all pyc and __pycache__ files - sometimes needed when refact
 
 	find ghostwriter -name '*.pyc' -delete
 	find ghostwriter -name '__pycache__' -delete
+
+.PHONY: clean-cython
+clean-cython:
+	find ghostwriter -name '*\.cpython-*.so' -delete
 
 .PHONY: _venv
 _venv:
