@@ -7,10 +7,11 @@ cdef extern from "wctype.h" nogil:
 cdef:
     TokenType EOF = 10
     TokenType NEWLINE = 11
-    TokenType EXPR = 12
-    TokenType LITERAL = 13
-    TokenType CTRL_KW = 14
-    TokenType CTRL_ARGS = 15
+    TokenType PREFIX = 12
+    TokenType EXPR = 20
+    TokenType LITERAL = 21
+    TokenType CTRL_KW = 22
+    TokenType CTRL_ARGS = 23
 
 
 cpdef str token_label(TokenType t):
@@ -18,6 +19,8 @@ cpdef str token_label(TokenType t):
         return "EOF"
     elif t == NEWLINE:
         return "NEWLINE"
+    elif t == PREFIX:
+        return "PREFIX"
     elif t == EXPR:
         return "EXPR"
     elif t == LITERAL:
@@ -31,20 +34,58 @@ cpdef str token_label(TokenType t):
 
 
 cdef:
-    TokenizerState T_TOPLEVEL = 1
-    TokenizerState T_LINE = 2
-    TokenizerState T_CTRL_LINE = 3
+    TokenizerState TS_EOF = 1
+    TokenizerState TS_NL = 2
+    TokenizerState TS_PREFIX = 3
+    TokenizerState TS_TOPLEVEL = 4
+    TokenizerState TS_LITERAL = 5
+    TokenizerState TS_EXPR = 6
+    TokenizerState TS_CTRL_KW = 7
+    TokenizerState TS_CTRL_ARGS = 8
+    TS_LINE = 20
+    TokenizerState TS_EMIT = 100
+    TokenizerState TS_EMIT_NL = 101
+    TokenizerState TS_EMIT_PREFIX = 102
+    TokenizerState TS_EMIT_LITERAL = 103
+    TokenizerState TS_EMIT_EXPR = 104
+    TokenizerState TS_EMIT_CTRL_KW = 105
+    TokenizerState TS_EMIT_CTRL_ARGS = 106
 
 
 cpdef str tokenizer_state(TokenizerState tstate):
-    if tstate == T_TOPLEVEL:
-        return "TOPLEVEL"
-    elif tstate == T_LINE:
-        return "LINE"
-    elif tstate == T_CTRL_LINE:
-        return "T_CTRL_LINE"
+    if tstate == TS_EOF:
+        return "TS_EOF"
+    elif tstate == TS_NL:
+        return "TS_NL"
+    elif tstate == TS_PREFIX:
+        return "TS_PREFIX"
+    elif tstate == TS_TOPLEVEL:
+        return "TS_TOPLEVEL"
+    elif tstate == TS_LITERAL:
+        return "TS_LITERAL"
+    elif tstate == TS_EXPR:
+        return "TS_EXPR"
+    elif tstate == TS_CTRL_KW:
+        return "TS_CTRL_KW"
+    elif tstate == TS_CTRL_ARGS:
+        return "TS_CTRL_ARGS"
+    elif tstate == TS_LINE:
+        return "TS_LINE"
+    elif tstate == TS_EMIT_NL:
+        return "TS_EMIT_NL"
+    elif tstate == TS_EMIT_PREFIX:
+        return "TS_EMIT_PREFIX"
+    elif tstate == TS_EMIT_LITERAL:
+        return "TS_EMIT_LITERAL"
+    elif tstate == TS_EMIT_EXPR:
+        return "TS_EMIT_EXPR"
+    elif tstate == TS_EMIT_CTRL_KW:
+        return "TS_EMIT_CTRL_KW"
+    elif tstate == TS_EMIT_CTRL_ARGS:
+        return "TS_EMIT_CTRL_ARGS"
     else:
         return f"UNKNOWN-STATE({tstate})"
+
 
 cdef class Location:
     def __init__(self, size_t line, size_t col):
@@ -73,7 +114,7 @@ cdef class Location:
 
 
 cdef class Token:
-    def __init__(self, TokenType type, str lexeme):
+    def __cinit__(self, TokenType type, str lexeme):
         self.lexeme = lexeme
         self.type = type
 
@@ -87,79 +128,42 @@ cdef class Token:
         return f"({token_label(self.type)}: {self.lexeme})"
 
 
-cdef class CtrlToken(Token):
-    def __init__(self, str lexeme, str prefix):
-        super().__init__(CTRL_KW, lexeme)
-        self.prefix = prefix
-
-    def __eq__(self, other):
-        return other.type == self.type and other.lexeme == self.lexeme and other.prefix == self.prefix
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def __repr__(self):
-        return f"({self.type}: '{self.prefix} {self.lexeme}')"
-
-
 cdef:
-    Token T_EOF = Token(EOF, '<EOF>')
-    Token T_NEWLINE = Token(NEWLINE, '<NL>')
+    Token TOK_EOF = Token(EOF, '<EOF>')
+    Token TOK_NEWLINE = Token(NEWLINE, '<NL>')
 
 
 cdef class TokenFactory:
-    @staticmethod
-    cdef Token eof():
-        return T_EOF
-
-    @staticmethod
-    cdef Token newline():
-        return T_NEWLINE
-
-    @staticmethod
-    cdef Token expr(str lexeme):
-        return Token(EXPR, lexeme)
-
-    @staticmethod
-    cdef Token literal(str lexeme):
-        return Token(LITERAL, lexeme)
-
-    @staticmethod
-    cdef Token ctrl_kw(str lexeme, str prefix = ''):
-        return CtrlToken(lexeme, prefix)
-
-    @staticmethod
-    cdef Token ctrl_args(str lexeme):
-        return Token(CTRL_ARGS, lexeme)
-
-
-cdef class PyTokenFactory:
     """Python-only wrapper for TokenFactory
 
     Proxies calls to TokenFactory, use TokenFactory directly from Cython"""
     @staticmethod
     def eof():
-        return TokenFactory.eof()
+        return TOK_EOF
 
     @staticmethod
     def newline():
-        return TokenFactory.newline()
+        return TOK_NEWLINE
+
+    @staticmethod
+    def prefix(str lexeme):
+        return Token.__new__(Token, PREFIX, lexeme)
 
     @staticmethod
     def expr(str lexeme):
-        return TokenFactory.expr(lexeme)
+        return Token.__new__(Token, EXPR, lexeme)
 
     @staticmethod
     def literal(str lexeme):
-        return TokenFactory.literal(lexeme)
+        return Token.__new__(Token, LITERAL, lexeme)
 
     @staticmethod
-    def ctrl_kw(str lexeme, str prefix = ''):
-        return TokenFactory.ctrl_kw(lexeme, prefix)
+    def ctrl_kw(str lexeme):
+        return Token.__new__(Token, CTRL_KW, lexeme)
 
     @staticmethod
     def ctrl_args(str lexeme):
-        return TokenFactory.ctrl_args(lexeme)
+        return Token.__new__(Token, CTRL_ARGS, lexeme)
 
 
 cdef inline bint peek_2(wchar_t *buf, Py_ssize_t pos, wchar_t ch1, wchar_t ch2):
@@ -171,9 +175,8 @@ cdef class Tokenizer:
         self.prog = prog
         self.prog_len = len(prog)
         self.buf = prog # get ref to underlying buffer
-        self.state = T_TOPLEVEL
+        self.state = TS_NL
         self.pos = 0
-
 
     cpdef Token next(self):
         cdef:
@@ -181,127 +184,170 @@ cdef class Tokenizer:
             Py_ssize_t pos = self.pos
             Py_ssize_t prog_len = self.prog_len
             TokenizerState state = self.state
-            Py_ssize_t pos_prefix_start = pos
-            Py_ssize_t pos_prefix_end
             Py_ssize_t start
 
-        if pos == self.prog_len:
-            return T_EOF
+        while True:
+            # print(f"LOOP, state: {tokenizer_state(state)}")
+            if state == TS_EOF:
+                self.state = TS_EOF
+                return TOK_EOF
 
-        if state == T_LINE:
-            if buf[pos] == '<' and buf[pos + 1] == '<':
+            if state == TS_NL:
+                # => EOF?
+                if pos == self.prog_len:
+                    state = TS_EOF
+                    continue
+
+                # => PREFIX?
+                if iswblank(buf[pos]):
+                    # scan past whitespace to find first newline/character
+                    pos += 1
+                    while iswblank(buf[pos]):
+                        pos += 1
+
+                if self.pos != pos:
+                    # consumed some whitespace, emit prefix
+                    state = TS_EMIT_PREFIX
+                    continue
+
+                # => NL?
+                if buf[pos] == '\n':
+                    state = TS_EMIT_NL
+                    continue
+
+                # >> TOPLEVEL
+                state = TS_TOPLEVEL
+                continue
+
+            elif state == TS_PREFIX:
+                # => NL?
+                if buf[pos] == '\n':
+                    state = TS_EMIT_NL
+                    continue
+
+                # >> TOPLEVEL
+                state = TS_TOPLEVEL
+                continue
+
+            elif state == TS_TOPLEVEL:
+                # => NL?
+                if buf[pos] == '\n':
+                    state = TS_EMIT_NL
+                    continue
+
+                if buf[pos] == '%':
+                    # => LITERAL!
+                    if buf[pos+1] == '%':
+                        pos += 1 # consume/skip the one '%'
+                        state = TS_EMIT_LITERAL
+                        self.state = TS_LINE
+                        continue
+                    # => CTRL_KW!
+                    state = TS_EMIT_CTRL_KW
+                    self.state = TS_EMIT_CTRL_ARGS
+                    continue
+
+                # >> LINE
+                state = TS_LINE
+                continue
+
+            elif state == TS_LINE:
+                # => NL?
+                if buf[pos] == '\n':
+                    state = TS_EMIT_NL
+                    continue
+
+                # => EXPR
+                if buf[pos] == '<' and buf[pos+1] == '<':
+                    state = TS_EMIT_EXPR
+                    continue
+
+                # => LITERAL, >> TS_EMIT_LITERAL
+                state = TS_EMIT_LITERAL
+                continue
+
+            elif state == TS_EMIT_NL:
+                if buf[pos] == '\n':
+                    self.pos = pos + 1
+                    self.state = TS_NL
+                    return TOK_NEWLINE ## TODO: rename to TOK_NEWLINE after refactor
+
+            elif state == TS_EMIT_PREFIX:
+                start = self.pos
+                self.pos = pos
+                self.state = TS_TOPLEVEL
+                return Token.__new__(Token, PREFIX, buf[start:pos])
+
+            elif state == TS_EMIT_EXPR:
                 pos += 2
                 start = pos
                 while True:
                     if pos == prog_len or buf[pos] == '\n':
                         raise RuntimeError("error - expression not closed")
-                    if buf[pos] == '>' and buf[pos + 1] == '>':
+                    elif buf[pos] == '>' and buf[pos + 1] == '>':
                         self.pos = pos + 2
-                        # retain state
-                        return TokenFactory.expr(buf[start:pos])
+                        self.state = TS_LINE
+                        return Token.__new__(Token, EXPR, buf[start:pos])
 
                     pos += 1
-                    # TODO: EOF check ?
-            # => must be a literal or newline
-            elif buf[pos] == '\n':
-                self.pos = pos + 1
-                self.state = T_TOPLEVEL
-                return T_NEWLINE ## TODO: rename to TOK_NEWLINE after refactor
-            # => a literal
-            start = pos
-            while True:
-                # if EOF - return what we got as a literal
-                if pos == prog_len:
-                    self.pos = pos
-                    self.state = T_TOPLEVEL # TODO: signal EOF permanently ?
 
-                    return TokenFactory.literal(buf[start:pos])
-                # iff at start of an expression
-                elif buf[pos] == '<' and buf[pos + 1] == '<':
-                    # literal ended by an expression starting
-                    self.pos = pos
-                    # retain state
-                    return TokenFactory.literal(buf[start:pos])
-                # iff a newline is encountered
-                elif buf[pos] == '\n':
-                    self.pos = pos
-                    self.state = T_TOPLEVEL
-                    return TokenFactory.literal(buf[start:pos])
-                pos += 1
-
-        elif state == T_TOPLEVEL:
-            # scan past whitespace to find first newline/character
-            if iswblank(buf[pos]):
-                pos += 1
-                while iswblank(buf[pos]):
+            elif state == TS_EMIT_LITERAL:
+                start = pos
+                while True:
+                    # if EOF - return what we got as a literal
+                    if pos == prog_len:
+                        self.pos = pos
+                        self.state = TS_EOF
+                        break
+                    # iff at start of an expression
+                    elif buf[pos] == '<' and buf[pos + 1] == '<':
+                        # literal ended by an expression starting
+                        self.pos = pos
+                        self.state = TS_EMIT_EXPR
+                        break
+                    # iff a newline is encountered
+                    elif buf[pos] == '\n':
+                        self.pos = pos
+                        self.state = TS_NL
+                        break
                     pos += 1
+                if start == pos:
+                    # prevent empty literal tokens
+                    state = self.state
+                    continue
+                return Token.__new__(Token, LITERAL, buf[start:pos])
 
-            # whitespace, iff NL/EXPR follows, we must first emit a literal containing the whitespace
-            if self.pos != pos:
-                # got a newline? emit a literal and count on next call to emit the newline itself
-                if buf[pos] == '\n':
-                    self.pos = pos + 1
-                    # retain state
-                    return TokenFactory.literal(buf[pos_prefix_start:pos])
-                # got an expression ? emit a literal and transition to the line state
-                elif buf[pos] == '<' and buf[pos+1] == '<':
-                    self.pos = pos
-                    self.state = T_LINE
-                    return TokenFactory.literal(buf[pos_prefix_start:pos])
-            # no whitespace, for NL/EXPR, this means we can process and emit these directly
-            else:
-                if buf[pos] == '\n':
-                    self.pos = pos + 1
-                    # retain state
-                    return T_NEWLINE
-                elif buf[pos] == '<' and buf[pos+1] == '<':
-                    # transition to LINE state
-                    self.pos = pos
-                    self.state = T_LINE
-                    return self.next()
-
-            # no whitespace/NL/EXPR token => CtrlKW/Literal
-            if buf[pos] == '%':
-                pos_prefix_end = pos
-                pos += 1 # skip first '%' (for now)
-                # '%' is escaped -> literal line, emit literal with one '%' and transition to the line state
-                if buf[pos] == '%':
-                    self.pos = pos + 1
-                    self.state = T_LINE
-                    return TokenFactory.literal(buf[pos_prefix_start:pos])
-
-                # => Ctrl line
-                # pos @ first ch past '%' - may have whitespace to skip.
+            elif state == TS_EMIT_CTRL_KW:
+                pos += 1 # consume '%'
                 while pos != prog_len and iswblank(buf[pos]):
                     pos += 1
                 if pos == prog_len:
                     raise RuntimeError("EOF err - line terminated without any CtrlKW")
                 # found beginning of CtrlKW
-                start = pos # TODO: keep an additional var around ?
+                start = pos
                 while pos != prog_len and not iswspace(buf[pos]):
                     pos += 1
-                self.state = T_CTRL_LINE
+                self.state = TS_EMIT_CTRL_ARGS  # TODO: good idea ? can also have a newline, must handle
                 self.pos = pos
-                return TokenFactory.ctrl_kw(buf[start:pos], buf[pos_prefix_start:pos_prefix_end])
+                return Token.__new__(Token, CTRL_KW, buf[start:pos])
 
-            # => literal, do NOT update pos as whitespace should be included in literals...
-            self.state = T_LINE
-            return self.next()
-        elif state == T_CTRL_LINE:
-            while iswblank(buf[pos]):
-                pos += 1
-            # got a ctrl line, returned a CtrlKW token, (optionally) parse args.
-            begin = pos
-            while pos != prog_len and buf[pos] != '\n':
-                pos += 1
-            self.pos = pos
-            self.state = T_TOPLEVEL
-            if begin == pos:
-                # No args were given, restart tokenization @ top-level state
-                return self.next()
-            return TokenFactory.ctrl_args(buf[begin:pos])
-        else:
-            raise RuntimeError(f"unrecognized tokenizer state: {state}")
+            elif state == TS_EMIT_CTRL_ARGS:
+                while iswblank(buf[pos]):
+                    pos += 1
+                # got a ctrl line, returned a CtrlKW token, (optionally) parse args.
+                start = pos
+                while pos != prog_len and buf[pos] != '\n':
+                    pos += 1
+                self.pos = pos
+                self.state = TS_NL
+                if start == pos:
+                    # No args were given, restart tokenization @ top-level state
+                    state = self.state
+                    continue
+                return Token.__new__(Token, CTRL_ARGS, buf[start:pos])
+
+            else:
+                raise RuntimeError(f"unrecognized tokenizer state: {state}")
 
 
     cpdef Location location(self):

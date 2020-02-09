@@ -1,6 +1,6 @@
 import pytest
 from ghostwriter.utils.cogen.tokenizer import (
-    PyTokenFactory as TokenFactory,
+    TokenFactory,
     Tokenizer
 )
 from ghostwriter.utils.cogen.parser import (

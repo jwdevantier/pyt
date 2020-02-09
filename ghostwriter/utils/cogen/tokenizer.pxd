@@ -13,11 +13,6 @@ cdef:
     TokenType CTRL_ARGS
 
 
-cdef:
-    TokenizerState T_TOPLEVEL
-    TokenizerState T_LINE
-    TokenizerState T_CTRL_LINE
-
 cdef class Location:
     cdef:
         size_t _line
@@ -34,26 +29,6 @@ cdef class CtrlToken(Token):
 
 
 cdef class TokenFactory:
-    @staticmethod
-    cdef Token eof()
-
-    @staticmethod
-    cdef Token newline()
-
-    @staticmethod
-    cdef Token expr(str lexeme)
-
-    @staticmethod
-    cdef Token literal(str lexeme)
-
-    @staticmethod
-    cdef Token ctrl_kw(str lexeme, str prefix = ?)
-
-    @staticmethod
-    cdef Token ctrl_args(str lexeme)
-
-
-cdef class PyTokenFactory:
     pass
 
 

@@ -1,7 +1,7 @@
 import pytest
 from ghostwriter.utils.cogen.tokenizer import (
     Tokenizer,
-    PyTokenFactory as TokenFactory
+    TokenFactory
 )
 
 NL = TokenFactory.newline()
@@ -29,15 +29,18 @@ EOF = TokenFactory.eof()
 
     ("indented lines",
      "   line 1\nline 2\nline 3\n   line 4\n      line 5", [
-        TokenFactory.literal("   line 1"),
+        TokenFactory.prefix("   "),
+        TokenFactory.literal("line 1"),
         NL,
         TokenFactory.literal("line 2"),
         NL,
         TokenFactory.literal("line 3"),
         NL,
-        TokenFactory.literal("   line 4"),
+        TokenFactory.prefix("   "),
+        TokenFactory.literal("line 4"),
         NL,
-        TokenFactory.literal("      line 5")
+        TokenFactory.prefix("      "),
+        TokenFactory.literal("line 5")
      ]),
 
     # literals + exprs
@@ -47,7 +50,7 @@ EOF = TokenFactory.eof()
          TokenFactory.expr('world')
      ]),
 
-    ("literal line with expr",
+    ("literal, expr, literal with leading whitespace",
      "hello, <<free>> world", [
          TokenFactory.literal("hello, "),
          TokenFactory.expr("free"),
@@ -59,6 +62,12 @@ EOF = TokenFactory.eof()
          TokenFactory.expr("thing")
      ]),
 
+    ("leading expr, followed by literal",
+     "<<thing>>!", [
+        TokenFactory.expr("thing"),
+        TokenFactory.literal("!")
+     ]),
+
     # control lines
     ("control keyword",
      "%for", [TokenFactory.ctrl_kw('for')]),
@@ -67,13 +76,21 @@ EOF = TokenFactory.eof()
      "%for ", [TokenFactory.ctrl_kw('for')]),
 
     ("control keyword - whitespace prefix",
-     "  %for ", [TokenFactory.ctrl_kw('for', '  ')]),
+     "  %for ", [TokenFactory.prefix('  '), TokenFactory.ctrl_kw('for')]),
 
     ("control keyword - whitespace between '%' and keyword",
      "% for ", [TokenFactory.ctrl_kw('for')]),
 
+    ("control keyword - prefix, whitespace between '%' and keyword",
+     "   % for ", [
+        TokenFactory.prefix("   "),
+        TokenFactory.ctrl_kw("for")]),
+
     ("control keyword, newline",
      "%for\n", [TokenFactory.ctrl_kw('for'), NL]),
+
+    ("control keyword, trailing whitespace, newline",
+     "%for  \n", [TokenFactory.ctrl_kw('for'), NL]),
 
     ("control keyword - with args",
      "%for x in [1,2,3,4]",
@@ -92,13 +109,12 @@ EOF = TokenFactory.eof()
 
     ("escaped control string (=> literal)",
      "%% literal", [
-        TokenFactory.literal('%'),
-        TokenFactory.literal(' literal')]),
+        TokenFactory.literal('% literal')]),
 
     ("escaped control string with prefix (=> literal)",
      "   %% literal", [
-        TokenFactory.literal('   %'),
-        TokenFactory.literal(' literal')]),
+        TokenFactory.prefix('   '),
+        TokenFactory.literal('% literal')]),
 
     ("small program",
      '\n'.join([
