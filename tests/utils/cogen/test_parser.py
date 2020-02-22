@@ -1,3 +1,4 @@
+import typing as t
 import pytest
 from ghostwriter.utils.cogen.parser import (
     CogenParser,
@@ -9,7 +10,16 @@ from ghostwriter.utils.cogen.tokenizer import (
 from testlib import programs as progs
 
 
-@pytest.mark.parametrize("case", [
+def name_testcases(*testcases: progs.TestCase)\
+        -> t.Generator[t.Tuple[progs.TestCase, progs.Example], None, None]:
+    test_num = 0
+    for testcase in testcases:
+        test_num += 1
+        # http://doc.pytest.org/en/latest/example/parametrize.html
+        yield pytest.param(testcase, id=f"{test_num} - {testcase.header}")
+
+
+@pytest.mark.parametrize("case", name_testcases(
     progs.line_literal_simplest,
     progs.line_lit_var,
     progs.line_expr_first,
@@ -30,8 +40,7 @@ from testlib import programs as progs
     progs.indent_if_toplevel,
     progs.indent_block_toplevel,
     progs.indent_component_1_flat_component,
-    progs.indent_component_2_indented_body_block,
-])
+    progs.indent_component_2_indented_body_block))
 def test_parse_valid_progs(case):
     parser = CogenParser(Tokenizer(case.program))
     print(parser)

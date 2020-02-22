@@ -362,7 +362,7 @@ component_block_scope_inherited = TestCase(
 
 
 body_block_simplest = TestCase(
-    "",
+    "%body simplest",
     [
         "% body"
     ],
@@ -372,7 +372,7 @@ body_block_simplest = TestCase(
 )
 
 body_block_nested = TestCase(
-    "",
+    "%body - nested in larger template",
     [
         "before body",
         "% body",

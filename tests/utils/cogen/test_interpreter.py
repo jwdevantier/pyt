@@ -14,11 +14,16 @@ from testlib import programs as progs
 # TODO: write fn to generate full list of tests (essentially unrolling the loop so each test is shown in the output)
 def collect_testcase_examples(*testcases: progs.TestCase)\
         -> t.Generator[t.Tuple[progs.TestCase, progs.Example], None, None]:
+    test_num = 0
     for testcase in testcases:
+        test_num += 1
+        example_num = 0
         if len(testcase.examples) == 0:
             raise RuntimeError(f"{testcase} has no examples! Remove case from list or write examples to use")
         for example in testcase.examples:
-            yield testcase, example
+            example_num += 1
+            # http://doc.pytest.org/en/latest/example/parametrize.html
+            yield pytest.param(testcase, example, id=f"{test_num} - {testcase.header}#{example_num}")
 
 
 @pytest.mark.parametrize("case, example", collect_testcase_examples(
