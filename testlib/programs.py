@@ -413,8 +413,8 @@ indent_is_wysiwyg_if = TestCase(
     nf.program([
         nf.line('', [nf.literal("hello")]),
         nf.if_([nf.block('   ', 'if', 'True', [
-            nf.line('   ', [nf.literal("if line 1")]),
-            nf.line('   ', [nf.literal("if line 2")])])]),
+            nf.line('', [nf.literal("if line 1")]),
+            nf.line('', [nf.literal("if line 2")])])]),
         nf.line('', [nf.literal("world")])
     ]),
     Example(
@@ -442,7 +442,7 @@ indent_is_wysiwyg_for = TestCase(
     nf.program([
         nf.line('', [nf.literal("hello")]),
         nf.block('   ', 'for', 'x in range(0,2)', [
-                nf.line('   ', [nf.literal("line "), nf.expr("x")])]),
+                nf.line('', [nf.literal("line "), nf.expr("x")])]),
         nf.line('', [nf.literal("world")])
     ]),
     Example(
@@ -479,8 +479,8 @@ indent_component_1 = TestCase(
     nf.program([
         nf.line('', [nf.literal("hello")]),
         nf.block('   ', 'r', 'Example()', [
-                nf.line('   ', [nf.literal('body line 1')]),
-                nf.line('      ', [nf.literal('body line 2')])
+                nf.line('', [nf.literal('body line 1')]),
+                nf.line('   ', [nf.literal('body line 2')])
             ]),
         nf.line('', [nf.literal("world")])
     ]),
@@ -521,8 +521,8 @@ indent_component_block_to_ctrl_line = TestCase(
     nf.program([
         nf.line('', [nf.literal("hello")]),
         nf.block('   ', 'r', 'Example()', [
-                nf.line('   ', [nf.literal("body line 1")]),
-                nf.line('      ', [nf.literal("body line 2")])
+                nf.line('', [nf.literal("body line 1")]),
+                nf.line('   ', [nf.literal("body line 2")])
             ]),
         nf.line('', [nf.literal("world")])
     ]),

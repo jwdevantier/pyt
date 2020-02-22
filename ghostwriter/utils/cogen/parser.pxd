@@ -17,12 +17,12 @@ cdef class Expr(Node):
 
 
 cdef class Line(Node):
-    cpdef public str prefix
+    cpdef public str indentation
     cpdef public list children  # type: t.List[t.Union[Literal,Expr]]
 
 
 cdef class Block(Node):
-    cpdef public str block_prefix
+    cpdef public str block_indentation
     cpdef public str keyword
     cpdef public str args
     cpdef public list children  # type: t.List[Line, Block]

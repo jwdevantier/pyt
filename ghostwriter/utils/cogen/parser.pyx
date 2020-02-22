@@ -95,12 +95,12 @@ cdef class NodeFactory:
         return Expr.__new__(Expr, value)
 
     @staticmethod
-    def line(str prefix, list children = None):
-        return Line.__new__(Line, prefix, children)
+    def line(str indentation, list children = None):
+        return Line.__new__(Line, indentation, children)
 
     @staticmethod
-    def block(str prefix, str keyword, str args = '', list children = None):
-        return Block.__new__(Block, prefix, keyword, args, children)
+    def block(str indentation, str keyword, str args = '', list children = None):
+        return Block.__new__(Block, indentation, keyword, args, children)
 
     @staticmethod
     def if_(list conds = None):
@@ -145,24 +145,24 @@ cdef class Expr(Node):
 
 
 cdef class Line(Node):
-    def __cinit__(self, str prefix, list children = None):
-        self.prefix = prefix
+    def __cinit__(self, str indentation, list children = None):
+        self.indentation = indentation
         self.children = children or []
 
     def __eq__(self, other):
         return (
             isinstance(other, self.__class__)
-            and other.prefix == self.prefix
+            and other.indentation == self.indentation
             and other.children == self.children
         )
 
     def __repr__(self):
-        return  f"Line('{self.prefix}': {','.join(repr(child) for child in self.children)})"
+        return  f"Line('{self.indentation}': {','.join(repr(child) for child in self.children)})"
 
 
 cdef class Block(Node):
-    def __cinit__(self, str prefix, str keyword, str args = '', list children = None):
-        self.block_prefix = prefix
+    def __cinit__(self, str indentation, str keyword, str args = '', list children = None):
+        self.block_indentation = indentation
         self.keyword = keyword
         self.args = args
         self.children = children or []
@@ -170,7 +170,7 @@ cdef class Block(Node):
     def __eq__(self, other):
         return (
             isinstance(other, self.__class__)
-            and other.block_prefix == self.block_prefix
+            and other.block_indentation == self.block_indentation
             and other.keyword == self.keyword
             and other.args == self.args
             and other.children == self.children
@@ -182,7 +182,7 @@ cdef class Block(Node):
             line =f"keyword: '{self.keyword}', args: '{self.args}'"
         else:
             line = f"keyword: '{self.keyword}'"
-        return  f"Block({line}, block_prefix: '{self.block_prefix}', children: {','.join(repr(child) for child in self.children)})"
+        return  f"Block({line}, block_indentation: '{self.block_indentation}', children: {','.join(repr(child) for child in self.children)})"
 
 
 cdef class If(Node):
@@ -221,8 +221,12 @@ cdef inline bint valid_elif_or_else_block(IF_STATE state, IF_STATE kw_state):
     return state < kw_state < IF_STATE_END or (IF_STATE_ELIF == kw_state == state)
 
 
+cdef inline str element_indentation(CogenParser p):
+    return p.prefix_line[len(p.prefix_block_head):]
+
+
 cdef inline Line empty_line(CogenParser p):
-    return Line.__new__(Line, p.prefix_line, [])
+    return Line.__new__(Line, element_indentation(p), [])
 
 
 cdef inline block_indent(CogenParser p):
@@ -299,7 +303,7 @@ cdef class CogenParser:
         # consume trailing newline.
         if tok.type == NEWLINE:  # TODO: how come I end up with a CTRL_KW here ?
             self.advance()
-        return Line.__new__(Line, self.prefix_line, children)
+        return Line.__new__(Line, element_indentation(self), children)
 
     cdef If _parse_if_block(self):
         cdef:
@@ -309,6 +313,7 @@ cdef class CogenParser:
             str keyword
             list conds = []
             Block cond
+            str parent_prefix_block_head = self.prefix_block_head
 
         print("_parse_if_block: entered")
 
@@ -324,10 +329,10 @@ cdef class CogenParser:
             tok = self.advance()
 
             if tok.type == CTRL_ARGS:
-                cond = Block.__new__(Block, self.prefix_line, keyword, tok.lexeme)
+                cond = Block.__new__(Block, self.prefix_line[len(parent_prefix_block_head):], keyword, tok.lexeme)
                 tok = self.advance()
             else:
-                cond = Block.__new__(Block, self.prefix_line, keyword)
+                cond = Block.__new__(Block, self.prefix_line[len(parent_prefix_block_head):], keyword)
             conds.append(cond)
             print("_parse_if_block:l:cond made")
             tok = consume_expected_token(self, NEWLINE)
@@ -400,7 +405,7 @@ cdef class CogenParser:
         if keyword == 'body':
             validate_indentation_line(self)
             self.advance()
-            return Block.__new__(Block, prefix, keyword)
+            return Block.__new__(Block, element_indentation(self), keyword)
 
         block_indent(self)
 
@@ -454,7 +459,7 @@ cdef class CogenParser:
                 print(f"UnhandledTokenError({self.tokenizer.location()}, {self.curr_token}, '_parse_block')")
                 raise UnhandledTokenError(self.tokenizer.location(), self.curr_token, "_parse_block")
             tok = self.curr_token
-        return Block.__new__(Block, prefix, keyword, args, children)
+        return Block.__new__(Block, element_indentation(self), keyword, args, children)
 
     # Indentation @ block-level is really as simple as registering the line prefix
     cpdef Program parse_program(self):
