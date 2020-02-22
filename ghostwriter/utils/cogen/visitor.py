@@ -1,5 +1,5 @@
 from ghostwriter.utils.cogen.parser import (
-    Program, Block, If, Literal, Expr, Line, CLine
+    Program, Block, If, Literal, Expr, Line
 )
 
 
@@ -20,8 +20,8 @@ class ASTVisitor(Visitor):
 
     def visit_Block(self, node: Block):
         return Block(
-            self.visit(node.header),
-            [self.visit(l) for l in node.lines]
+            node.block_indentation, node.keyword, node.args,
+            [self.visit(l) for l in node.children]
         )
 
     def visit_If(self, node: If):
@@ -34,7 +34,7 @@ class ASTVisitor(Visitor):
         return node
 
     def visit_Line(self, node: Line):
-        return Line([self.visit(n) for n in node.contents])
+        return Line(node.indentation, [self.visit(n) for n in node.children])
 
-    def visit_CLine(self, node: CLine):
-        return node
+    # def visit_CLine(self, node: CLine):
+    #     return node

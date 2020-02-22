@@ -1,13 +1,11 @@
 import pytest
 from ghostwriter.utils.cogen.tokenizer import (
-    TokenFactory,
     Tokenizer
 )
 from ghostwriter.utils.cogen.parser import (
-    CogenParser, Program, Literal, Expr, Line, CLine, Block, If, Node,
-    ParserError, UnexpectedTokenError, InvalidBlockNestingError, InvalidEndBlockArgsError
+    CogenParser, Program, Literal, Expr, Line, Block, If, Node,
 )
-from ghostwriter.utils.cogen.visitor import ASTVisitor#RewriteComponentNodes, Component
+from ghostwriter.utils.cogen.visitor import ASTVisitor
 import re
 import typing as t
 
@@ -15,32 +13,33 @@ rgx_fn_call = re.compile(r"(?P<ident>^[^\d\W]\w*)\((?P<args>.*)\)\Z", re.UNICODE
 
 
 class Component(Node):
-    def __init__(self, identifier: str, args: str, lines: t.List[Node]):
+    def __init__(self, identifier: str, args: str, children: t.List[Node]):
+        super().__init__()
         self.identifier = identifier
         self.args = args
-        self.lines = lines
+        self.children = children
 
     def __eq__(self, other):
         return (
             isinstance(other, self.__class__)
             and other.identifier == self.identifier
             and other.args == self.args
-            and other.lines == self.lines
+            and other.children == self.children
         )
 
     def __repr__(self):
-        return f'r({self.identifier}: ~~{self.args}~~, {self.lines})'
+        return f'r({self.identifier}: ~~{self.args}~~, {self.children})'
 
 
 class RewriteComponentNodes(ASTVisitor):
     def visit_Block(self, node: Block):
-        if node.header.keyword != 'r':
+        if node.keyword != 'r':
             return super().visit_Block(node)
-        m = rgx_fn_call.match(node.header.args)
+        m = rgx_fn_call.match(node.args)
         if not m:
             raise RuntimeError("Invalid component")
         return Component(m.group('ident'), m.group('args'), [
-            self.visit(l) for l in node.lines
+            self.visit(l) for l in node.children
         ])
 
 
@@ -54,7 +53,7 @@ class RewriteComponentNodes(ASTVisitor):
      Program([
          Component(
              'MyFN', 'self.fn_name, self.fn_args', [
-                Line([Literal('print("hello, world")')])
+                Line('', [Literal('print("hello, world")')])
              ])
      ])),
 
@@ -70,9 +69,9 @@ class RewriteComponentNodes(ASTVisitor):
      Program([
          Component(
              'MyFN', 'self.fn_name, self.fn_args', [
-                Line([Literal('print("hello, world")')]),
+                Line('', [Literal('print("hello, world")')]),
                 Component('MyInnerFN', 'self.fn_name, self.fn_args', [
-                    Line([Literal('print("hello, from inside")')]),
+                    Line('', [Literal('print("hello, from inside")')]),
                 ])
              ])
      ])),
@@ -84,8 +83,8 @@ class RewriteComponentNodes(ASTVisitor):
          "%/foo",
      ]),
      Program([
-         Block(CLine('foo', 'MyFN(self.fn_name, self.fn_args)'), [
-            Line([Literal('print("hello, world")')])
+         Block('', 'foo', 'MyFN(self.fn_name, self.fn_args)', [
+            Line('', [Literal('print("hello, world")')])
          ])
      ])),
 ])
