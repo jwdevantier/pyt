@@ -44,7 +44,7 @@ line_literal_simplest = TestCase(
 
 
 line_lit_var = TestCase(
-    "line - literal, multiple elements (& variable)",
+    "line - literal, multiple elements (& expression)",
     [
         "hello, <<thing>>!\n"
     ],
@@ -104,6 +104,31 @@ line_lit_adv = TestCase(
             "Peter: 12 years old\n"
         ],
         {"name": "Peter", "age": 12}
+    )
+)
+
+line_exprs_side_by_side = TestCase(
+    "line - expressions side-by-side",
+    [
+        "<<foo>><<bar>>"
+    ],
+    nf.program([
+        nf.line('', [
+            nf.expr("foo"),
+            nf.expr("bar"),])]),
+    Example(
+        "",
+        [
+            "firstsecond\n"
+        ],
+        {"foo": "first", "bar": "second"}
+    ),
+    Example(
+        "",
+        [
+            "one.two.\n"
+        ],
+        {"foo": "one.", "bar": "two."}
     )
 )
 
@@ -268,7 +293,7 @@ class HelloComponent(Component):
     template = "hello, <<self.thing>>"
 
 
-component_block_simple_var = TestCase(
+component_block_scope_arg = TestCase(
     "A sample component block using vars from arguments",
     [
         "%r MyComponent(name)",
@@ -304,7 +329,7 @@ class HelloScopeVarComponent(Component):
     template = "hello, <<thing>>"
 
 
-component_block_simple_var_from_scope = TestCase(
+component_block_scope_inherited = TestCase(
     "A sample component block using var from inherited scope",
     [
         "%r MyComponent()",
@@ -395,7 +420,7 @@ component_block_w_body = TestCase(
 
 # TODO: showcase component calling function as part of transformation
 
-indent_text_lines = TestCase(
+indent_lines_text = TestCase(
     "show how indentation among text lines is respected",
     [
         "   line 1",
@@ -424,14 +449,44 @@ indent_text_lines = TestCase(
     )
 )
 
+
+indent_lines_expr = TestCase(
+    "show how indentation among lines of exprs is respected",
+    [
+        "   <<msg>>",
+        "<<msg>>",
+        "<<msg>>",
+        "   <<msg>>",
+        "      <<msg>>",
+    ],
+    nf.program([
+        nf.line('   ', [nf.expr("msg")]),
+        nf.line('', [nf.expr("msg")]),
+        nf.line('', [nf.expr("msg")]),
+        nf.line('   ', [nf.expr("msg")]),
+        nf.line('      ', [nf.expr("msg")]),
+    ]),
+    Example(
+        '',
+        [
+            "   hello",
+            "hello",
+            "hello",
+            "   hello",
+            "      hello\n",
+        ],
+        {"msg": "hello"}
+    )
+)
+
 # TODO: a variant of this where the if-block's contents are deindented will produce an 'invalid indentation' error
-indent_is_wysiwyg_if = TestCase(
-    "show how indentation is wysiwyg relative to the base indentation level",
+indent_if_toplevel = TestCase(
+    "show how if-block contents are indented relative to the if opening line",
     [
         "hello",
         "   % if True",
         "   if line 1",
-        "   if line 2",
+        "      if line 2",
         "   %/if",
         "world"
     ],
@@ -439,7 +494,7 @@ indent_is_wysiwyg_if = TestCase(
         nf.line('', [nf.literal("hello")]),
         nf.if_([nf.block('   ', 'if', 'True', [
             nf.line('', [nf.literal("if line 1")]),
-            nf.line('', [nf.literal("if line 2")])])]),
+            nf.line('   ', [nf.literal("if line 2")])])]),
         nf.line('', [nf.literal("world")])
     ]),
     Example(
@@ -447,7 +502,7 @@ indent_is_wysiwyg_if = TestCase(
         [
             "hello",
             "   if line 1",
-            "   if line 2",
+            "      if line 2",
             "world\n"
         ],
         {}
@@ -455,19 +510,21 @@ indent_is_wysiwyg_if = TestCase(
 )
 
 
-indent_is_wysiwyg_for = TestCase(
-    "show how a for-block's opening line determine base indentation of its children",
+indent_block_toplevel = TestCase(
+    "show how <block> contents are indented relative to the block opening line",
     [
         "hello",
         "   % for x in range(0,2)",
         "   line <<x>>",
+        "     booyah!",
         "   %/for",
         "world"
     ],
     nf.program([
         nf.line('', [nf.literal("hello")]),
         nf.block('   ', 'for', 'x in range(0,2)', [
-                nf.line('', [nf.literal("line "), nf.expr("x")])]),
+            nf.line('', [nf.literal("line "), nf.expr("x")]),
+            nf.line('  ', [nf.literal("booyah!")])]),
         nf.line('', [nf.literal("world")])
     ]),
     Example(
@@ -475,7 +532,9 @@ indent_is_wysiwyg_for = TestCase(
         [
             "hello",
             "   line 0",
+            "     booyah!",
             "   line 1",
+            "     booyah!",
             "world\n"
         ],
         {}
@@ -491,8 +550,8 @@ class IndentExample1(Component):
     """
 
 
-indent_component_1 = TestCase(
-    "show how component children is indented by the indentation level of the component block",
+indent_component_1_flat_component = TestCase(
+    "show how component contents (& body) is rendered relative to the indentation level of the r-block",
     [
         "hello",
         "   % r Example()",
@@ -532,9 +591,8 @@ class IndentExampleComponent(Component):
     """
 
 
-# TODO: this is probably the hardest to grasp, but r-indent, body-indent and line-indent is all purely additive
-indent_component_block_to_ctrl_line = TestCase(
-    "show how a component-block's opening line determine base indentation of its children",
+indent_component_2_indented_body_block = TestCase(
+    "component contents are rendered using r-block's indentation. Body contents furthermore uses body-block's indentation",
     [
         "hello",
         "   % r Example()",

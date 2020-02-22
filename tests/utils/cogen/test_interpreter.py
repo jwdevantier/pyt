@@ -26,21 +26,23 @@ def collect_testcase_examples(*testcases: progs.TestCase)\
     progs.line_lit_var,
     progs.line_expr_first,
     progs.line_lit_adv,
+    progs.line_exprs_side_by_side,
     progs.if_simplest,
     progs.if_elif_else,
     progs.for_block_simplest,
     progs.for_block_use_var,
     progs.component_block_simplest,
-    progs.component_block_simple_var,
-    progs.component_block_simple_var_from_scope,
-    progs.indent_text_lines,
-    progs.indent_is_wysiwyg_if,
-    progs.indent_is_wysiwyg_for,
-    progs.indent_component_1,
-    progs.indent_component_block_to_ctrl_line,
+    progs.component_block_scope_arg,
+    progs.component_block_scope_inherited,
     progs.component_block_w_body,
+    progs.indent_lines_text,
+    progs.indent_lines_expr,
+    progs.indent_if_toplevel,
+    progs.indent_block_toplevel,
+    progs.indent_component_1_flat_component,
+    progs.indent_component_2_indented_body_block,
 ))
-def test_smth(case, example):
+def test_interpret_valid_progs(case, example):
     buf: BufferWriter = BufferWriter()
     writer: Writer = Writer(buf)
     interpret(case.ast, writer, example.blocks, example.scope)
