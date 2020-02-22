@@ -1,7 +1,6 @@
 from typing import List, Any, Dict, Optional
-from ghostwriter.utils.cogen.parser import (
-    CogenParser, Program, Literal, Expr, Line, CLine, Block, If,
-)
+from ghostwriter.utils.cogen.parser import NodeFactory as nf
+from ghostwriter.utils.cogen.parser import Program
 from ghostwriter.utils.cogen.component import Component
 
 Scope = Dict[str, Any]
@@ -32,9 +31,9 @@ line_literal_simplest = TestCase(
     [
         "hello, world\n"
     ],
-    Program([
-        Line([
-            Literal("hello, world")])]),
+    nf.program([
+        nf.line('', [
+            nf.literal("hello, world")])]),
     Example(
         '',
         [
@@ -49,11 +48,11 @@ line_lit_var = TestCase(
     [
         "hello, <<thing>>!\n"
     ],
-    Program([
-        Line([
-            Literal("hello, "),
-            Expr("thing"),
-            Literal("!")])]),
+    nf.program([
+        nf.line('', [
+            nf.literal("hello, "),
+            nf.expr("thing"),
+            nf.literal("!")])]),
     Example(
         '',
         [
@@ -73,9 +72,9 @@ line_expr_first = TestCase(
     [
         "<<greeting>>"
     ],
-    Program([
-        Line([
-            Expr("greeting")
+    nf.program([
+        nf.line('', [
+            nf.expr("greeting")
         ])
     ]),
     Example(
@@ -93,12 +92,12 @@ line_lit_adv = TestCase(
     [
         "<<name>>: <<age>> years old"
     ],
-    Program([
-        Line([
-            Expr("name"),
-            Literal(": "),
-            Expr("age"),
-            Literal(" years old")])]),
+    nf.program([
+        nf.line('', [
+            nf.expr("name"),
+            nf.literal(": "),
+            nf.expr("age"),
+            nf.literal(" years old")])]),
     Example(
         "",
         [
@@ -116,9 +115,9 @@ if_simplest = TestCase(
         "x is something",
         "%/if"
     ],
-    Program([
-        If([Block(CLine('if', 'x is not None'), [
-            Line([Literal("x is something")])])])]),
+    nf.program([
+        nf.if_([nf.block('', 'if', 'x is not None', [
+            nf.line('', [nf.literal("x is something")])])])]),
     Example(
         "set x",
         [
@@ -147,13 +146,13 @@ if_elif_else = TestCase(
         "meh, who cares",
         "%/if"
     ],
-    Program([
-        If([Block(CLine('if', 'foo == 1'), [
-            Line([Literal('foo won!')])]),
-            Block(CLine('elif', 'foo == 2'), [
-                Line([Literal('foo got second place!')])]),
-            Block(CLine('else'), [
-                Line([Literal('meh, who cares')])])])]),
+    nf.program([
+        nf.if_([nf.block('', 'if', 'foo == 1', [
+            nf.line('', [nf.literal('foo won!')])]),
+            nf.block('', 'elif', 'foo == 2', [
+                nf.line('', [nf.literal('foo got second place!')])]),
+            nf.block('', 'else', '', [
+                nf.line('', [nf.literal('meh, who cares')])])])]),
     Example(
         '',
         [
@@ -181,10 +180,9 @@ for_block_simplest = TestCase(
         "something",
         "%/for"
     ],
-    Program([
-        Block(
-            CLine('for', 'x in y'), [
-                Line([Literal("something")])])]),
+    nf.program([
+        nf.block('', 'for', 'x in y', [
+            nf.line('', [nf.literal("something")])])]),
     Example(
         'empty iterable',
         [
@@ -213,10 +211,9 @@ for_block_use_var = TestCase(
         "<<name>>: <<age>> years old",
         "%/for"
     ],
-    Program([
-        Block(
-            CLine('for', 'name, age in persons'), [
-                Line([Expr("name"), Literal(": "), Expr("age"), Literal(" years old")])])]),
+    nf.program([
+        nf.block('', 'for', 'name, age in persons', [
+                nf.line('', [nf.expr("name"), nf.literal(": "), nf.expr("age"), nf.literal(" years old")])])]),
     Example(
         'empty iterable',
         [
@@ -249,9 +246,8 @@ component_block_simplest = TestCase(
         "%r MyComponent()",
         "%/r",
     ],
-    Program([
-        Block(
-            CLine('r', 'MyComponent()'), [])
+    nf.program([
+        nf.block('', 'r', 'MyComponent()', [])
     ]),
     Example(
         '',
@@ -278,9 +274,8 @@ component_block_simple_var = TestCase(
         "%r MyComponent(name)",
         "%/r",
     ],
-    Program([
-        Block(
-            CLine('r', 'MyComponent(name)'), [])
+    nf.program([
+        nf.block('', 'r', 'MyComponent(name)', [])
     ]),
     Example(
         '',
@@ -315,9 +310,8 @@ component_block_simple_var_from_scope = TestCase(
         "%r MyComponent()",
         "%/r",
     ],
-    Program([
-        Block(
-            CLine('r', 'MyComponent()'), [])
+    nf.program([
+        nf.block('', 'r', 'MyComponent()', [])
     ]),
     Example(
         '',
@@ -357,11 +351,9 @@ component_block_w_body = TestCase(
         "there lived a woman in a hut",
         "%/r",
     ],
-    Program([
-        Block(
-            CLine('r', "storytime()"), [
-                Line([Literal("there lived a woman in a hut")])
-            ])
+    nf.program([
+        nf.block('', 'r', 'storytime()', [
+                nf.line('', [nf.literal("there lived a woman in a hut")])])
     ]),
     Example(
         '',
@@ -387,12 +379,12 @@ indent_text_lines = TestCase(
         "   line 4",
         "      line 5",
     ],
-    Program([
-        Line([Literal("   line 1")]),
-        Line([Literal("line 2")]),
-        Line([Literal("line 3")]),
-        Line([Literal("   line 4")]),
-        Line([Literal("      line 5")]),
+    nf.program([
+        nf.line('   ', [nf.literal("line 1")]),
+        nf.line('', [nf.literal("line 2")]),
+        nf.line('', [nf.literal("line 3")]),
+        nf.line('   ', [nf.literal("line 4")]),
+        nf.line('      ', [nf.literal("line 5")]),
     ]),
     Example(
         '',
@@ -407,22 +399,23 @@ indent_text_lines = TestCase(
     )
 )
 
+# TODO: a variant of this where the if-block's contents are deindented will produce an 'invalid indentation' error
 indent_is_wysiwyg_if = TestCase(
     "show how indentation is wysiwyg relative to the base indentation level",
     [
         "hello",
         "   % if True",
-        "if line 1",
-        "if line 2",
-        "%/if",
+        "   if line 1",
+        "   if line 2",
+        "   %/if",
         "world"
     ],
-    Program([
-        Line([Literal("hello")]),
-        If([Block(CLine('if', 'True', prefix='   '), [
-            Line([Literal("if line 1")]),
-            Line([Literal("if line 2")])])]),
-        Line([Literal("world")])
+    nf.program([
+        nf.line('', [nf.literal("hello")]),
+        nf.if_([nf.block('   ', 'if', 'True', [
+            nf.line('   ', [nf.literal("if line 1")]),
+            nf.line('   ', [nf.literal("if line 2")])])]),
+        nf.line('', [nf.literal("world")])
     ]),
     Example(
         '',
@@ -442,16 +435,15 @@ indent_is_wysiwyg_for = TestCase(
     [
         "hello",
         "   % for x in range(0,2)",
-        "line <<x>>",
-        "%/for",
+        "   line <<x>>",
+        "   %/for",
         "world"
     ],
-    Program([
-        Line([Literal("hello")]),
-        Block(
-            CLine('for', 'x in range(0,2)', prefix='   '), [
-                Line([Literal("line "), Expr("x")])]),
-        Line([Literal("world")])
+    nf.program([
+        nf.line('', [nf.literal("hello")]),
+        nf.block('   ', 'for', 'x in range(0,2)', [
+                nf.line('   ', [nf.literal("line "), nf.expr("x")])]),
+        nf.line('', [nf.literal("world")])
     ]),
     Example(
         '',
@@ -479,19 +471,18 @@ indent_component_1 = TestCase(
     [
         "hello",
         "   % r Example()",
-        "body line 1",
+        "   body line 1",
         "      body line 2",
-        "%/r",
+        "   %/r",
         "world"
     ],
-    Program([
-        Line([Literal("hello")]),
-        Block(
-            CLine('r', 'Example()', prefix='   '), [
-                Line([Literal("body line 1")]),
-                Line([Literal("      body line 2")])
+    nf.program([
+        nf.line('', [nf.literal("hello")]),
+        nf.block('   ', 'r', 'Example()', [
+                nf.line('   ', [nf.literal('body line 1')]),
+                nf.line('      ', [nf.literal('body line 2')])
             ]),
-        Line([Literal("world")])
+        nf.line('', [nf.literal("world")])
     ]),
     Example(
         '',
@@ -522,19 +513,18 @@ indent_component_block_to_ctrl_line = TestCase(
     [
         "hello",
         "   % r Example()",
-        "body line 1",
+        "   body line 1",
         "      body line 2",
-        "%/r",
+        "   %/r",
         "world"
     ],
-    Program([
-        Line([Literal("hello")]),
-        Block(
-            CLine('r', 'Example()', prefix='   '), [
-                Line([Literal("body line 1")]),
-                Line([Literal("      body line 2")])
+    nf.program([
+        nf.line('', [nf.literal("hello")]),
+        nf.block('   ', 'r', 'Example()', [
+                nf.line('   ', [nf.literal("body line 1")]),
+                nf.line('      ', [nf.literal("body line 2")])
             ]),
-        Line([Literal("world")])
+        nf.line('', [nf.literal("world")])
     ]),
     Example(
         '',
@@ -542,7 +532,7 @@ indent_component_block_to_ctrl_line = TestCase(
             "hello",
             "   before body",
             "      body line 1",
-            "            body line 2",
+            "         body line 2",
             "   after body",
             "world\n"
         ],
@@ -560,16 +550,15 @@ prog1 = TestCase(
         "else",
         "%/for"
     ],
-    Program([
-        Line([
-            Literal("hello, "),
-            Expr("thing"),
-            Literal("!")]),
+    nf.program([
+        nf.line('', [
+            nf.literal("hello, "),
+            nf.expr("thing"),
+            nf.literal("!")]),
 
-        Block(
-            CLine('for', 'x in y'), [
-                Line([Literal("something")]),
-                Line([Literal("else")]),
+        nf.block('', 'for', 'x in y', [
+                nf.line('', [nf.literal("something")]),
+                nf.line('', [nf.literal("else")]),
             ])
     ]),
     Example(
