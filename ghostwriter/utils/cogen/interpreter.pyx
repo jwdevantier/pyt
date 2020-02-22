@@ -124,7 +124,7 @@ cdef void interp_line(Line node, Writer w, dict blocks, dict scope) except *:
     cdef Literal lit = None
     cdef Expr expr = None
     w.write_indent()
-    for n in node.contents:
+    for n in node.children:
         if isinstance(n, Literal):
             w.write((<Literal>n).value)
         elif isinstance(n, Expr):
@@ -137,14 +137,14 @@ cdef void interp_line(Line node, Writer w, dict blocks, dict scope) except *:
 cdef void interp_if(If ifblock, Writer w, dict blocks, dict scope) except *:
     cdef Block cond
     for cond in ifblock.conds:
-        if cond.header.keyword != 'else':
+        if cond.keyword != 'else':
             # conditional
-            if py_eval_expr(scope, cond.header.args):
-                for n in cond.lines:
+            if py_eval_expr(scope, cond.args):
+                for n in cond.children:
                     interp_node(n, w, blocks, scope)
                 return
         else:
-            for n in cond.lines:
+            for n in cond.children:
                 interp_node(n, w, blocks, scope)
             return
 
@@ -154,13 +154,13 @@ cdef void interp_component(Block block, Writer w, dict blocks, dict scope) excep
         dict new_scope = scope.copy()
         dict new_blocks = blocks.copy()
         # TODO: handle syntax errors here
-        object component = py_eval_expr(new_scope, block.header.args)
+        object component = py_eval_expr(new_scope, block.args)
     if not isinstance(component, Component):
-        raise RenderArgTypeError(block.header.args, component)
+        raise RenderArgTypeError(block.args, component)
     new_scope.update(component.__ghostwriter_component_scope__)
     new_scope['self'] = component
-    new_blocks['body'] = BodyEnvironment(block.lines, blocks, new_scope)
-    w.indent(block.header.prefix)
+    new_blocks['body'] = BodyEnvironment(block.children, blocks, new_scope)
+    w.indent(block.block_prefix)  # TODO: review this, component indentation SHOULDN'T work right atm (need to adjust indentation @ component time)
     interpret(component.ast, w, new_blocks, new_scope)
     w.dedent()
 
@@ -168,7 +168,7 @@ cdef void interp_component(Block block, Writer w, dict blocks, dict scope) excep
 cdef void interp_body_block(Block body, Writer w, dict blocks, dict scope) except *:
     cdef Node n
     cdef BodyEnvironment b_env = blocks['body']
-    w.indent(body.header.prefix)
+    w.indent(body.block_prefix)
     for n in b_env.lines:
         interp_node(n, w, b_env.blocks, b_env.scope)
     w.dedent()
@@ -176,22 +176,22 @@ cdef void interp_body_block(Block body, Writer w, dict blocks, dict scope) excep
 
 cdef void interp_block(Block block, Writer w, dict blocks, dict scope) except *:
     cdef dict new_scope
-    if block.header.keyword == "r": # handle component
+    if block.keyword == "r": # handle component
         interp_component(block, w, blocks, scope)
-    elif block.header.keyword == "for": # handle for-block
+    elif block.keyword == "for": # handle for-block
         # TODO: assuming lexical scope here, OK?
         new_scope = scope.copy()
-        for loop_bindings in gen_loop_iterator(block.header.args, new_scope):
+        for loop_bindings in gen_loop_iterator(block.args, new_scope):
             new_scope.update(loop_bindings)  # TODO: find a means of testing this - vars changed in one iter should be carried over
-            for n in block.lines:
+            for n in block.children:
                 interp_node(<Node>n, w, blocks, new_scope)
-    elif block.header.keyword == "body":
+    elif block.keyword == "body":
         interp_body_block(block, w, blocks, scope)
     else:
-        raise RuntimeError(f"cannot handle '{block.header.keyword}' blocks yet")
+        raise RuntimeError(f"cannot handle '{block.keyword}' blocks yet")
 
 
-cdef void interp_node(Node n, Writer w, dict blocks, dict scope) except *:
+cdef inline void interp_node(Node n, Writer w, dict blocks, dict scope) except *:
     if isinstance(n, Line):
         interp_line(<Line>n, w, blocks, scope)
     elif isinstance(n, If):
