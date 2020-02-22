@@ -365,7 +365,7 @@ cdef class Tokenizer:
             size_t line = 1
             size_t nl_pos = 0
 
-        while pos <= end_pos:
+        while pos < end_pos:
             if buf[pos] == '\n':
                 nl_pos = pos
                 line += 1

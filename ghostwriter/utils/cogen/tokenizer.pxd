@@ -7,6 +7,7 @@ ctypedef Py_ssize_t TokenType
 cdef:
     TokenType EOF
     TokenType NEWLINE
+    TokenType PREFIX
     TokenType EXPR
     TokenType LITERAL
     TokenType CTRL_KW
@@ -37,7 +38,6 @@ cdef class Tokenizer:
         str prog
         Py_ssize_t prog_len
         wchar_t *buf
-        # TokenType last
         TokenizerState state
         Py_ssize_t pos
 
