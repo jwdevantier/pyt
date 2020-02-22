@@ -26,6 +26,8 @@ from testlib import programs as progs
     progs.indent_is_wysiwyg_for,
     progs.indent_component_1,
     progs.indent_component_block_to_ctrl_line,
+    progs.body_block_simplest,
+    progs.body_block_nested,
     progs.component_block_w_body,
 ])
 def test_parse_valid_progs(case):
@@ -33,11 +35,6 @@ def test_parse_valid_progs(case):
     print(parser)
     # strangely, will show up with case.ast as Expected
     assert parser.parse_program() == case.ast, f"failed: {case.header}"
-
-# TODO: open block tests
-# TODO: close block tests
-# TODO: some must verify that prefix/indent chars aren't interchangable
-# TODO: invalid nesting test
 
 
 @pytest.mark.parametrize("msg, prog, err", [

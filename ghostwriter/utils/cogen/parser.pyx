@@ -286,7 +286,6 @@ cdef class CogenParser:
 
     cdef Token advance(self):
         self.curr_token = self.tokenizer.next()
-        print(f"CogenParser.advance => {repr(self.curr_token)}")
         return self.curr_token
 
     cdef Line _parse_line(self):
@@ -315,8 +314,6 @@ cdef class CogenParser:
             Block cond
             str parent_prefix_block_head = self.prefix_block_head
 
-        print("_parse_if_block: entered")
-
         if tok.type != CTRL_KW or tok.lexeme != 'if':
             raise ParserError("illegal parse state")  # TODO: refine
 
@@ -334,11 +331,9 @@ cdef class CogenParser:
             else:
                 cond = Block.__new__(Block, self.prefix_line[len(parent_prefix_block_head):], keyword)
             conds.append(cond)
-            print("_parse_if_block:l:cond made")
             tok = consume_expected_token(self, NEWLINE)
 
             while True:  # per line
-                print(f"_parse_if_block:l:l: tok {repr(tok)}")
                 if tok.type == PREFIX:
                     self.prefix_line = tok.lexeme
                     tok = self.advance()
@@ -346,7 +341,6 @@ cdef class CogenParser:
                     self.prefix_line = ''
 
                 if tok.type == CTRL_KW:
-                    print(f"_parse_if_block:l:l: CTRL_KW")
                     kw_state = tok2if_state(tok)
                     if tok.lexeme[0] == '/':
                         if tok.lexeme == '/if':
@@ -359,32 +353,25 @@ cdef class CogenParser:
                         else:
                             raise InvalidBlockNestingError(self.tokenizer.location(), '/if', self.curr_token.lexeme)
                     elif valid_elif_or_else_block(state, kw_state):
-                        print(f"_parse_if_block:l:l: valid_elif_or_else_block")
                         validate_indentation_end_block(self, "all condition blocks must have the exact same indentation as the opening 'if'-block")
                         state = kw_state
                         break
 
                     validate_indentation_line(self)
                     if kw_state == IF_STATE_IF:  # nested if, recurse
-                        print(f"_parse_if_block:l:l: IF_STATE_IF")
                         cond.children.append(self._parse_if_block())
                     elif kw_state == IF_STATE_NONE and tok.lexeme[0] != '/':
-                        print(f"_parse_if_block:l:l: CTRL_KW block")
                         cond.children.append(self._parse_block())
                     else:
-                        print(f"UnhandledTokenError({self.tokenizer.location()}, {self.curr_token}, '_parse_if_block:ctrl_kw')")
                         raise UnhandledTokenError(self.tokenizer.location(), tok, '_parse_if_block:ctrl_kw')
                 else:
                     validate_indentation_line(self)
                     if tok.type == LITERAL or tok.type == EXPR:
-                        print(f"_parse_if_block:l:l: LITERAL|EXPR")
                         cond.children.append(self._parse_line())
                     elif tok.type == NEWLINE:
-                        print(f"_parse_if_block:l:l: NEWLINE")
                         cond.children.append(empty_line(self))
                         self.advance()
                     else:
-                        print(f"UnhandledTokenError({self.tokenizer.location()}, {self.curr_token}, '_parse_if_block:else')")
                         raise UnhandledTokenError(self.tokenizer.location(), self.curr_token, "_parse_if_block:else")
                 tok = self.curr_token
         return If.__new__(If, conds)
@@ -397,7 +384,6 @@ cdef class CogenParser:
             str args = ''
             str prefix = self.prefix_line
             Token tok
-        print("_parse_block: entered")
 
         if keyword == 'if':
             raise RuntimeError("if-block not supported, must use _parse_if_block")
@@ -405,6 +391,7 @@ cdef class CogenParser:
         if keyword == 'body':
             validate_indentation_line(self)
             self.advance()
+            skip_token_if(self, NEWLINE)
             return Block.__new__(Block, element_indentation(self), keyword)
 
         block_indent(self)
@@ -420,17 +407,13 @@ cdef class CogenParser:
             iter -= 1
             if iter == 0:
                 raise RuntimeError("inf loop")
-            print(f"_parse_block:<loop>: start - tok {repr(tok)}")
             if tok.type == PREFIX:
-                print("_parse_block:<loop>:PREFIX")
                 self.prefix_line = tok.lexeme
                 tok = self.advance()
             else:
-                print("_parse_block:<loop>:<no prefix>")
                 self.prefix_line = ''
 
             if tok.type == CTRL_KW and tok.lexeme[0] == '/':
-                print("_parse_block:<loop>:CTRL_KW END")
                 validate_indentation_end_block(self)
                 block_dedent(self)
                 if tok.lexeme == end_kw:
@@ -443,20 +426,16 @@ cdef class CogenParser:
 
             validate_indentation_line(self)
             if tok.type == CTRL_KW:
-                print("_parse_block:<loop>:CTRL_KW")
                 if tok.lexeme == 'if':
                     children.append(self._parse_if_block())
                 else:
                     children.append(self._parse_block())
             elif tok.type == LITERAL or tok.type == EXPR:
-                print("_parse_block:<loop>:LITERAL|EXPR")
                 children.append(self._parse_line())
             elif tok.type == NEWLINE:
-                print("_parse_block:<loop>:NEWLINE")
                 children.append(empty_line(self))
                 self.advance()
             else:
-                print(f"UnhandledTokenError({self.tokenizer.location()}, {self.curr_token}, '_parse_block')")
                 raise UnhandledTokenError(self.tokenizer.location(), self.curr_token, "_parse_block")
             tok = self.curr_token
         return Block.__new__(Block, element_indentation(self), keyword, args, children)
@@ -473,28 +452,22 @@ cdef class CogenParser:
                 raise RuntimeError("loop error")
             self.prefix_line = ''
             if tok.type == PREFIX:
-                print("parse_program:PREFIX")
                 self.prefix_line = tok.lexeme
                 tok = self.advance()
 
             if tok.type == LITERAL or tok.type == EXPR:
-                print("parse_program: LITERAL|EXPR")
                 children.append(self._parse_line())
             elif tok.type == CTRL_KW:
-                print("parse_program: CTRL_KW")
                 if tok.lexeme == 'if':
                     children.append(self._parse_if_block())
                 else:
                     children.append(self._parse_block())
             elif tok.type == NEWLINE:
-                print("parse_program: NEWLINE")
                 children.append(empty_line(self))
                 tok = self.advance()
             elif tok.type == EOF:
-                print("parse_program: EOF")
                 break
             else:
-                print(f"UnhandledTokenError({self.tokenizer.location()}, {self.curr_token}, 'parse_program')")
                 raise UnhandledTokenError(self.tokenizer.location(), self.curr_token, "parse_program")
             tok = self.curr_token
 

@@ -15,7 +15,7 @@ cdef class Writer(IWriter):
     cpdef void indent(self, str prefix)
     cpdef void dedent(self)
     cpdef void write(self, str contents)
-    cpdef void write_indent(self)
+    cpdef void write_prefix(self)
     cpdef void newline(self)
 
 

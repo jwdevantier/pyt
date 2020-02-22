@@ -336,6 +336,31 @@ component_block_simple_var_from_scope = TestCase(
 )
 
 
+body_block_simplest = TestCase(
+    "",
+    [
+        "% body"
+    ],
+    nf.program([
+        nf.block('', 'body', '',[])
+    ])
+)
+
+body_block_nested = TestCase(
+    "",
+    [
+        "before body",
+        "% body",
+        "after body",
+    ],
+    nf.program([
+        nf.line('', [nf.literal("before body")]),
+        nf.block('', 'body', '',[]),
+        nf.line('', [nf.literal("after body")])
+    ])
+)
+
+
 class StoryTimeComponent(Component):
     template = """
     ~~ one upon a time ~~
@@ -421,8 +446,8 @@ indent_is_wysiwyg_if = TestCase(
         '',
         [
             "hello",
-            "if line 1",
-            "if line 2",
+            "   if line 1",
+            "   if line 2",
             "world\n"
         ],
         {}
@@ -449,8 +474,8 @@ indent_is_wysiwyg_for = TestCase(
         '',
         [
             "hello",
-            "line 0",
-            "line 1",
+            "   line 0",
+            "   line 1",
             "world\n"
         ],
         {}
@@ -490,7 +515,7 @@ indent_component_1 = TestCase(
             "hello",
             "   before body",
             "   body line 1",
-            "         body line 2",
+            "      body line 2",
             "   after body",
             "world\n"
         ],
