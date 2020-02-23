@@ -1,3 +1,4 @@
+import typing as t
 cimport cython
 from ghostwriter.utils.cogen.component import Component
 from re import compile as re_compile
@@ -5,6 +6,12 @@ from re import compile as re_compile
 # TODO: want a 'def'/'set' block to update scope - can call out to functions..?
 
 for_loop_stx = re_compile(r"^(?P<bindings>.+?)\s+in\s+(?P<iterable>.+)")
+
+
+cdef inline str type_name(object o):
+    return type(o).__name__
+
+
 cdef class InterpreterError(Exception):
     pass
 
@@ -12,7 +19,7 @@ cdef class InterpreterError(Exception):
 cdef class RenderArgTypeError(InterpreterError):
     def __init__(self, str expr, object obj):
         self.expr = expr
-        self.typ = stringify_type(obj)
+        self.typ = type_name(obj)
         super().__init__(f"render block expects component, but '{expr}' evaluated to '{self.typ}'")
 
 
@@ -102,18 +109,14 @@ def gen_loop_iterator(str stx, dict scope):
         code)
 
 
-cdef inline str stringify_type(object o):
-    return type(o).__name__
-
-
 cdef class BodyEnvironment:
     cdef:
-        list lines
+        list children  # type: t.List[Node]
         dict blocks
-        dict scope
+        dict scope  # type: t.Dict[str, t.Any]
 
-    def __init__(self, list lines, dict blocks, dict scope):
-        self.lines = lines
+    def __init__(self, list children, dict blocks, dict scope):
+        self.children = children
         self.blocks = blocks
         self.scope = scope
 
@@ -129,7 +132,7 @@ cdef void interp_line(Line node, Writer w, dict blocks, dict scope) except *:
         elif isinstance(n, Expr):
             w.write(str(py_eval_expr(scope, (<Expr>n).value)))
         else:
-            raise RuntimeError(f"Found node of type '{stringify_type(n)}' in Line.contents")
+            raise RuntimeError(f"Found node of type '{type_name(n)}' in Line.contents")
     w.newline()
 
 
@@ -170,7 +173,7 @@ cdef void interp_component(Block block, Writer w, dict blocks, dict scope) excep
 cdef void interp_body_block(Block body, Writer w, dict blocks, dict scope) except *:
     cdef Node n
     cdef BodyEnvironment b_env = blocks['body']
-    for n in b_env.lines:
+    for n in b_env.children:
         interp_node(n, w, b_env.blocks, b_env.scope)
 
 
@@ -180,7 +183,6 @@ cdef void interp_block(Block block, Writer w, dict blocks, dict scope) except *:
     if block.keyword == "r": # handle component
         interp_component(block, w, blocks, scope)
     elif block.keyword == "for": # handle for-block
-        # TODO: assuming lexical scope here, OK?
         new_scope = scope.copy()
         for loop_bindings in gen_loop_iterator(block.args, new_scope):
             new_scope.update(loop_bindings)  # TODO: find a means of testing this - vars changed in one iter should be carried over
@@ -201,7 +203,7 @@ cdef inline void interp_node(Node n, Writer w, dict blocks, dict scope) except *
     elif isinstance(n, Block):
         interp_block(<Block>n, w, blocks, scope)
     else:
-        raise RuntimeError(f"Interpreter cannot handle '{stringify_type(n)}' nodes")
+        raise RuntimeError(f"Interpreter cannot handle '{type_name(n)}' nodes")
 
 
 cpdef void interpret(Program program, Writer w, dict blocks, dict scope) except *:
