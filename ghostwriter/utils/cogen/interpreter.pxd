@@ -24,9 +24,16 @@ cdef class InterpreterError(Exception):
 
 
 cdef class RenderArgTypeError(InterpreterError):
-    cdef:
-        str expr
-        str typ
+    cdef public str expr
+    cdef public str typ
+
+
+cdef class UnknownNodeType(InterpreterError):
+    cdef public Node node
+
+
+cdef class UnknownBlockType(InterpreterError):
+    cdef public Block block
 
 
 cpdef void interpret(Program program, Writer w, dict blocks, dict scope) except *

@@ -23,6 +23,20 @@ cdef class RenderArgTypeError(InterpreterError):
         super().__init__(f"render block expects component, but '{expr}' evaluated to '{self.typ}'")
 
 
+cdef class UnknownNodeType(InterpreterError):
+    def __init__(self, Node n):
+        cdef str msg = f"Unknown node '{type_name(n)}'"
+        self.node = n
+        super().__init__(msg)
+
+
+cdef class UnknownBlockType(InterpreterError):
+    def __init__(self, Block b):
+        cdef str msg = f"Unknown block type '{b.keyword}' not supported"
+        self.block = b
+        super().__init__(msg)
+
+
 @cython.final
 cdef class Writer(IWriter):
     def __init__(self, IWriter writer, str prefix = ""):
@@ -156,7 +170,7 @@ cdef void interp_if(If ifblock, Writer w, dict blocks, dict scope) except *:
             return
 
 
-cdef void interp_component(Block block, Writer w, dict blocks, dict scope) except *:
+cdef void interp_block_component(Block block, Writer w, dict blocks, dict scope) except *:
     cdef:
         dict new_scope = scope.copy()
         dict new_blocks = blocks.copy()
@@ -170,7 +184,7 @@ cdef void interp_component(Block block, Writer w, dict blocks, dict scope) excep
     interpret(component.ast, w, new_blocks, new_scope)
 
 
-cdef void interp_body_block(Block body, Writer w, dict blocks, dict scope) except *:
+cdef void interp_block_body(Block body, Writer w, dict blocks, dict scope) except *:
     cdef Node n
     cdef BodyEnvironment b_env = blocks['body']
     for n in b_env.children:
@@ -181,7 +195,7 @@ cdef void interp_block(Block block, Writer w, dict blocks, dict scope) except *:
     cdef dict new_scope
     w.indent(block.block_indentation)
     if block.keyword == "r": # handle component
-        interp_component(block, w, blocks, scope)
+        interp_block_component(block, w, blocks, scope)
     elif block.keyword == "for": # handle for-block
         new_scope = scope.copy()
         for loop_bindings in gen_loop_iterator(block.args, new_scope):
@@ -189,9 +203,9 @@ cdef void interp_block(Block block, Writer w, dict blocks, dict scope) except *:
             for n in block.children:
                 interp_node(<Node>n, w, blocks, new_scope)
     elif block.keyword == "body":
-        interp_body_block(block, w, blocks, scope)
+        interp_block_body(block, w, blocks, scope)
     else:
-        raise RuntimeError(f"cannot handle '{block.keyword}' blocks yet")
+        raise UnknownBlockType(block)
     w.dedent()
 
 
@@ -203,7 +217,7 @@ cdef inline void interp_node(Node n, Writer w, dict blocks, dict scope) except *
     elif isinstance(n, Block):
         interp_block(<Block>n, w, blocks, scope)
     else:
-        raise RuntimeError(f"Interpreter cannot handle '{type_name(n)}' nodes")
+        raise UnknownNodeType(n)
 
 
 cpdef void interpret(Program program, Writer w, dict blocks, dict scope) except *:
