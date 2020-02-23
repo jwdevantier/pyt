@@ -43,6 +43,40 @@ line_literal_simplest = TestCase(
         ))
 
 
+line_literal_indented = TestCase(
+    "line - single literal",
+    [
+        "   hello, world\n"
+    ],
+    nf.program([
+        nf.line('   ', [
+            nf.literal("hello, world")])]),
+    Example(
+        '',
+        [
+            '   hello, world\n'
+        ],
+        {},
+        ))
+
+
+line_literal_escaped = TestCase(
+    "line - single literal, escaped",
+    [
+        "%% smth hello, world\n"
+    ],
+    nf.program([
+        nf.line('', [
+            nf.literal("% smth hello, world")])]),
+    Example(
+        '',
+        [
+            '% smth hello, world\n'
+        ],
+        {},
+        ))
+
+
 line_lit_var = TestCase(
     "line - literal, multiple elements (& expression)",
     [

@@ -21,6 +21,8 @@ def name_testcases(*testcases: progs.TestCase)\
 
 @pytest.mark.parametrize("case", name_testcases(
     progs.line_literal_simplest,
+    progs.line_literal_escaped,
+    progs.line_literal_indented,
     progs.line_lit_var,
     progs.line_expr_first,
     progs.line_lit_adv,
