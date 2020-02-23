@@ -300,7 +300,7 @@ cdef class CogenParser:
             )
             tok = self.advance()
         # consume trailing newline.
-        if tok.type == NEWLINE:  # TODO: how come I end up with a CTRL_KW here ?
+        if tok.type == NEWLINE:
             self.advance()
         return Line.__new__(Line, element_indentation(self), children)
 
@@ -315,7 +315,7 @@ cdef class CogenParser:
             str parent_prefix_block_head = self.prefix_block_head
 
         if tok.type != CTRL_KW or tok.lexeme != 'if':
-            raise ParserError("illegal parse state")  # TODO: refine
+            raise ExpectedTokenError(self.tokenizer.location(), self.curr_token, Token.__new__(Token, CTRL_KW, 'if'))
 
         block_indent(self)
 
@@ -386,7 +386,7 @@ cdef class CogenParser:
             Token tok
 
         if keyword == 'if':
-            raise RuntimeError("if-block not supported, must use _parse_if_block")
+            raise UnhandledTokenError(self.tokenizer.location(), self.curr_token, "_parse_block")
 
         if keyword == 'body':
             validate_indentation_line(self)
@@ -402,11 +402,7 @@ cdef class CogenParser:
             tok = self.advance()
         tok = consume_expected_token(self, NEWLINE)
 
-        iter = 40
         while True:  # per line
-            iter -= 1
-            if iter == 0:
-                raise RuntimeError("inf loop")
             if tok.type == PREFIX:
                 self.prefix_line = tok.lexeme
                 tok = self.advance()
@@ -445,11 +441,7 @@ cdef class CogenParser:
         cdef:
             Token tok = self.curr_token
             list children = []
-        iter = 4000
         while True:
-            iter -= 1
-            if iter == 0:
-                raise RuntimeError("loop error")
             self.prefix_line = ''
             if tok.type == PREFIX:
                 self.prefix_line = tok.lexeme
