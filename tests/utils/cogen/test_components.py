@@ -1,11 +1,31 @@
 import pytest
 from testlib.bufferwriter import BufferWriter
-
-from ghostwriter.parser import Context
-from ghostwriter.utils.cogen.component import Component
-from ghostwriter.utils.cogen.snippet import ComponentSnippet
-from ghostwriter.utils.cogen.interpreter import RenderArgTypeError
 from testlib.components import modulea
+
+from ghostwriter.utils.cogen.component import Component
+from ghostwriter.utils.cogen.tokenizer import Tokenizer
+from ghostwriter.utils.cogen.interpreter import Writer, interpret
+from ghostwriter.utils.cogen.parser import CogenParser, Program
+from ghostwriter.utils.iwriter import IWriter
+from ghostwriter.parser.fileparser import Context, SnippetCallbackFn
+from ghostwriter.utils.cogen.interpreter import RenderArgTypeError
+
+
+prog: Program = CogenParser(Tokenizer("""\
+% r __main__
+% /r""".lstrip())).parse_program()
+
+
+class ComponentSnippet(SnippetCallbackFn):
+    def __init__(self, component: Component, blocks = None):
+        if not isinstance(component, Component):
+            raise ValueError(f"component must be of instance component, got: '{type(component)}'")
+        self.component = component
+        self.blocks = blocks or {}
+
+    def apply(self, ctx: Context, snippet: str, prefix: str, fw: IWriter):
+        # TODO: could I use 'body' instead of '__main__' to avoid polluting scope?
+        interpret(prog, Writer(fw), {}, {'__main__': self.component})
 
 
 def snippet_eval(snippet: ComponentSnippet) -> str:
