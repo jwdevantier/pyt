@@ -3,6 +3,7 @@ from ghostwriter.parser.fileparser cimport ShouldReplaceFileCallbackFn
 
 
 cdef class FileSyncReplace(ShouldReplaceFileCallbackFn):
+    cdef FileChecksums filecheck
     cpdef bint apply(self, str temp, str orig) except *
 
 
