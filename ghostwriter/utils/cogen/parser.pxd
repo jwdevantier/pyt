@@ -1,7 +1,7 @@
 # cython: language_level=3
 import typing as t
 from ghostwriter.utils.cogen.tokenizer cimport (
-    TokenType, Token, Tokenizer, Location)
+    TokenType, Token, Tokenizer)
 
 
 cdef class Node:
@@ -10,10 +10,14 @@ cdef class Node:
 
 cdef class Literal(Node):
     cpdef public str value
+    cpdef public Py_ssize_t line
+    cpdef public Py_ssize_t col
 
 
 cdef class Expr(Node):
     cpdef public str value
+    cpdef public Py_ssize_t line
+    cpdef public Py_ssize_t col
 
 
 cdef class Line(Node):
@@ -26,6 +30,9 @@ cdef class Block(Node):
     cpdef public str keyword
     cpdef public str args
     cpdef public list children  # type: t.List[Line, Block]
+    cpdef public Py_ssize_t line
+    cpdef public Py_ssize_t col_kw
+    cpdef public Py_ssize_t col_args
 
 
 cdef class NodeFactory:
@@ -42,7 +49,8 @@ cdef class Program(Node):
 
 cdef class ParserError(Exception):
     cpdef public str error
-    cpdef public Location location
+    cpdef public Py_ssize_t line
+    cpdef public Py_ssize_t col
 
 
 cdef class UnhandledTokenError(ParserError):

@@ -57,7 +57,7 @@ def test_parse_valid_progs(case):
          "%/for smth"
      ]),
      {'type': UnhandledTokenError, 'match': ".*",
-      'line': 2, 'col': 10}),
+      'line': 2, 'col': 0}),  # TODO: should we not have gotten start of args ?
 
     ("/<block> w args - nested",
      "\n".join([
@@ -67,7 +67,7 @@ def test_parse_valid_progs(case):
          "% /foo"
      ]),
      {'type': UnhandledTokenError, 'match': ".*",
-      'line': 3, 'col': 10}),
+      'line': 3, 'col': 0}),  # TODO: should we not have gotten start of args ?
 
     ("/if w args - top-level",
      "\n".join([
@@ -75,7 +75,7 @@ def test_parse_valid_progs(case):
          "%/if smth"
      ]),
      {'type': UnhandledTokenError, 'match': ".*",
-      'line': 2, 'col': 9}),
+      'line': 2, 'col': 0}),  # TODO: should we not have gotten start of args ?
 
     ("/if w args - nested",
      "\n".join([
@@ -85,7 +85,7 @@ def test_parse_valid_progs(case):
          "% /foo"
      ]),
      {'type': UnhandledTokenError, 'match': ".*",
-      'line': 3, 'col': 9}),
+      'line': 3, 'col': 0}),  # TODO: should we not have gotten start of args ?
 
     # Case: indentation test - enforce line indentation
     ###################################################################
@@ -101,7 +101,7 @@ def test_parse_valid_progs(case):
          "   %/for"
      ]),
      {'type': IndentationError, 'match': ".*line's indentation.*",
-      'line': 4, 'col': 5}),
+      'line': 4, 'col': 2}),
 
     ("indentation - <block> - line indent - nested",
      "\n".join([
@@ -114,7 +114,7 @@ def test_parse_valid_progs(case):
          "   % /parent"
      ]),
      {'type': IndentationError, 'match': ".*line's indentation.*",
-      'line': 5, 'col': 7}),
+      'line': 5, 'col': 4}),
 
     ("indentation - if-block - line indent - top-level",
      "\n".join([
@@ -125,7 +125,7 @@ def test_parse_valid_progs(case):
          "   %/if"
      ]),
      {'type': IndentationError, 'match': ".*line's indentation.*",
-      'line': 4, 'col': 5}),
+      'line': 4, 'col': 2}),
 
     ("indentation - if-block - line indent - nested",
      "\n".join([
@@ -138,7 +138,7 @@ def test_parse_valid_progs(case):
          "   % /parent"
      ]),
      {'type': IndentationError, 'match': ".*line's indentation.*",
-      'line': 5, 'col': 7}),
+      'line': 5, 'col': 4}),
 
     # Case: indentation test - enforce block close indentation
     ###################################################################
@@ -156,7 +156,7 @@ def test_parse_valid_progs(case):
          "   % /parent"
      ]),
      {'type': IndentationError, 'match': ".*",
-      'line': 7, 'col': 8}),
+      'line': 7, 'col': 2}),
 
     ("indentation - /<block> - too much indentation",
      "\n".join([
@@ -170,7 +170,7 @@ def test_parse_valid_progs(case):
          "   % /parent"
      ]),
      {'type': IndentationError, 'match': ".*",
-      'line': 7, 'col': 10}),
+      'line': 7, 'col': 4}),
 
     # TODO: elif, else tests
     ("indentation - %elif - too little indentation",
@@ -187,7 +187,7 @@ def test_parse_valid_progs(case):
          "   % /parent"
      ]),
      {'type': IndentationError, 'match': ".*all condition blocks.*",
-      'line': 5, 'col': 10}),
+      'line': 5, 'col': 4}),
 
     ("indentation - %elif - too much indentation",
      "\n".join([
@@ -203,7 +203,7 @@ def test_parse_valid_progs(case):
          "   % /parent"
      ]),
      {'type': IndentationError, 'match': ".*all condition blocks.*",
-      'line': 5, 'col': 14}),
+      'line': 5, 'col': 8}),
 
     ("indentation - %else - too little indentation",
      "\n".join([
@@ -219,7 +219,7 @@ def test_parse_valid_progs(case):
          "   % /parent"
      ]),
      {'type': IndentationError, 'match': ".*all condition blocks.*",
-      'line': 7, 'col': 10}),
+      'line': 7, 'col': 4}),
 
     ("indentation - %else - too much indentation",
      "\n".join([
@@ -235,7 +235,7 @@ def test_parse_valid_progs(case):
          "   % /parent"
      ]),
      {'type': IndentationError, 'match': ".*all condition blocks.*",
-      'line': 7, 'col': 14}),
+      'line': 7, 'col': 8}),
 ])
 def test_parse_invalid_progs(msg, prog, err):
     """Ensure end block cannot have arguments"""
@@ -245,8 +245,8 @@ def test_parse_invalid_progs(msg, prog, err):
     line = err.get('line')
     col = err.get('col')
     if line:
-        assert excinfo.value.location.line == line, "unexpected line"
+        assert excinfo.value.line == line, "unexpected line"
     if col:
-        assert excinfo.value.location.col == col, "unexpected column"
+        assert excinfo.value.col == col, "unexpected column"
 
 # TODO: '% for', '%/ for' => error

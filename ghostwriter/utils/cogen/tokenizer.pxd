@@ -14,12 +14,6 @@ cdef:
     TokenType CTRL_ARGS
 
 
-cdef class Location:
-    cdef:
-        size_t _line
-        size_t _col
-
-
 cdef class Token:
     cpdef public str lexeme
     cpdef public TokenType type
@@ -41,8 +35,13 @@ cdef class Tokenizer:
         TokenizerState state
         Py_ssize_t pos
 
+
+        Py_ssize_t _pos_nl
+    cdef public Py_ssize_t pos_line
+    cdef public Py_ssize_t pos_col
+
     cpdef Token next(self)
-    cpdef Location location(self)
+    cpdef location(self)
 
 
 cpdef str token_label(TokenType t)

@@ -30,20 +30,21 @@ cdef inline IF_STATE tok2if_state(Token tok):
 
 
 cdef class ParserError(Exception):
-    def __init__(self, Location location, str error):
+    def __init__(self, (Py_ssize_t, Py_ssize_t) location, str error):
         super().__init__(error)
         self.error = error
-        self.location = location
+        self.line = location[0]
+        self.col = location[1]
 
     def __repr__(self):
-        return f"ParserError({str(self.location)}: {self.error})"
+        return f"ParserError(L{self.line},{self.col}: {self.error})"
 
     def __str__(self):
-        return f"Error parsing at L{self.location.line}:{self.location.col}: {self.error}"
+        return f"Error parsing at L{self.line},{self.col}: {self.error}"
 
 
 cdef class UnhandledTokenError(ParserError):
-    def __init__(self, Location location, Token token, str state):
+    def __init__(self, (Py_ssize_t, Py_ssize_t) location, Token token, str state):
         cdef:
             str error = f"Unexpected token (lexeme: {token.lexeme}, type: {token.type} ({token_label(token.type)})) during {state}"
         super().__init__(location, error)
@@ -52,7 +53,7 @@ cdef class UnhandledTokenError(ParserError):
 
 
 cdef class ExpectedTokenTypeError(ParserError):
-    def __init__(self, Location location, Token token, TokenType expected):
+    def __init__(self, (Py_ssize_t, Py_ssize_t) location, Token token, TokenType expected):
         cdef:
             str error = f"Expected: {expected}/{token_label(expected)}, got: {token.type}/{token_label(token.type)} (value: '{token.lexeme}')"
         super().__init__(location, error)
@@ -61,7 +62,7 @@ cdef class ExpectedTokenTypeError(ParserError):
 
 
 cdef class ExpectedTokenError(ParserError):
-    def __init__(self, Location location, Token token, Token expected):
+    def __init__(self, (Py_ssize_t, Py_ssize_t) location, Token token, Token expected):
         cdef:
             str error = f"Expected: {repr(expected)}, Got: {repr(token)}"
         super().__init__(location, error)
@@ -77,7 +78,7 @@ cdef class IndentationError(ParserError):
 
 
 cdef class InvalidBlockNestingError(ParserError):
-    def __init__(self, Location location, str expected, str actual):
+    def __init__(self, (Py_ssize_t, Py_ssize_t) location, str expected, str actual):
         cdef:
             str error = f"invalid nesting of blocks, expected '{expected}', got '{actual}'"
         super().__init__(location, error)
@@ -119,8 +120,10 @@ cdef class Node:
 
 
 cdef class Literal(Node):
-    def __cinit__(self, str value):
+    def __cinit__(self, str value, Py_ssize_t line = 0, Py_ssize_t col = 0):
         self.value = value
+        self.line = line
+        self.col = col
 
     def __eq__(self, other):
         return (
@@ -132,8 +135,10 @@ cdef class Literal(Node):
 
 
 cdef class Expr(Node):
-    def __cinit__(self, str value):
+    def __cinit__(self, str value, Py_ssize_t line = 0, Py_ssize_t col = 0):
         self.value = value
+        self.line = line
+        self.col = col
 
     def __eq__(self, other):
         return (
@@ -161,11 +166,16 @@ cdef class Line(Node):
 
 
 cdef class Block(Node):
-    def __cinit__(self, str indentation, str keyword, str args = '', list children = None):
+    def __cinit__(self, str indentation, str keyword, str args = '', list children = None,
+                  Py_ssize_t line = 0, Py_ssize_t col_kw = 0, Py_ssize_t col_args = -1):
         self.block_indentation = indentation
         self.keyword = keyword
         self.args = args
         self.children = children or []
+
+        self.line = line
+        self.col_kw = col_kw
+        self.col_args = col_args
 
     def __eq__(self, other):
         return (
@@ -292,11 +302,14 @@ cdef class CogenParser:
         cdef:
             list children = []
             Token tok = self.curr_token
+
         while tok.type in (LITERAL, EXPR):
             children.append(
-                Literal.__new__(Literal, tok.lexeme)
+                Literal.__new__(Literal, tok.lexeme,
+                                line=self.tokenizer.pos_line, col=self.tokenizer.pos_col)
                 if tok.type == LITERAL
-                else Expr.__new__(Expr, tok.lexeme)
+                else Expr.__new__(Expr, tok.lexeme,
+                                  line=self.tokenizer.pos_line, col=self.tokenizer.pos_col)
             )
             tok = self.advance()
         # consume trailing newline.
@@ -313,6 +326,8 @@ cdef class CogenParser:
             list conds = []
             Block cond
             str parent_prefix_block_head = self.prefix_block_head
+            Py_ssize_t line
+            Py_ssize_t col_kw
 
         if tok.type != CTRL_KW or tok.lexeme != 'if':
             raise ExpectedTokenError(self.tokenizer.location(), self.curr_token, Token.__new__(Token, CTRL_KW, 'if'))
@@ -323,13 +338,18 @@ cdef class CogenParser:
             expect_token_type(self, CTRL_KW)
 
             keyword = tok.lexeme
+            line = self.tokenizer.pos_line
+            col_kw = self.tokenizer.pos_col
+
             tok = self.advance()
 
             if tok.type == CTRL_ARGS:
-                cond = Block.__new__(Block, self.prefix_line[len(parent_prefix_block_head):], keyword, tok.lexeme)
+                cond = Block.__new__(Block, self.prefix_line[len(parent_prefix_block_head):], keyword, tok.lexeme,
+                                     line=line, col_kw=col_kw, col_args=self.tokenizer.pos_col)
                 tok = self.advance()
             else:
-                cond = Block.__new__(Block, self.prefix_line[len(parent_prefix_block_head):], keyword)
+                cond = Block.__new__(Block, self.prefix_line[len(parent_prefix_block_head):], keyword,
+                                     line=line, col_kw=col_kw)
             conds.append(cond)
             tok = consume_expected_token(self, NEWLINE)
 
@@ -384,21 +404,27 @@ cdef class CogenParser:
             str args = ''
             str prefix = self.prefix_line
             Token tok
+            Py_ssize_t line
+            Py_ssize_t col_kw
+            Py_ssize_t col_args = -1
 
         if keyword == 'if':
             raise UnhandledTokenError(self.tokenizer.location(), self.curr_token, "_parse_block")
 
+        line = self.tokenizer.pos_line
+        col_kw = self.tokenizer.pos_col
         if keyword == 'body':
             validate_indentation_line(self)
             self.advance()
             skip_token_if(self, NEWLINE)
-            return Block.__new__(Block, element_indentation(self), keyword)
+            return Block.__new__(Block, element_indentation(self), keyword, line=line, col_kw=col_kw)
 
         block_indent(self)
 
         tok = self.advance()
         if tok.type == CTRL_ARGS:
             args = tok.lexeme
+            col_args = self.tokenizer.pos_col
             tok = self.advance()
         tok = consume_expected_token(self, NEWLINE)
 
@@ -434,7 +460,8 @@ cdef class CogenParser:
             else:
                 raise UnhandledTokenError(self.tokenizer.location(), self.curr_token, "_parse_block")
             tok = self.curr_token
-        return Block.__new__(Block, element_indentation(self), keyword, args, children)
+        return Block.__new__(Block, element_indentation(self), keyword, args, children,
+                             line=line, col_kw=col_kw, col_args=col_args)
 
     # Indentation @ block-level is really as simple as registering the line prefix
     cpdef Program parse_program(self):

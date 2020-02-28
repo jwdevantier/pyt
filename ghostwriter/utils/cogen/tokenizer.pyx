@@ -87,32 +87,6 @@ cpdef str tokenizer_state(TokenizerState tstate):
         return f"UNKNOWN-STATE({tstate})"
 
 
-cdef class Location:
-    def __init__(self, size_t line, size_t col):
-        self._line = line
-        self._col = col
-
-    def __repr__(self):
-        return f"Location<Line: {self._line}, Column: {self._col}>"
-
-    def __str__(self):
-        return f"L{self._line}:{self._col}"
-
-    def __eq__(self, other):
-        return (
-            isinstance(other, Location)
-            and other._line == self._line
-            and other._col == self._col)
-
-    @property
-    def line(self):
-        return self._line
-
-    @property
-    def col(self):
-        return self._col
-
-
 cdef class Token:
     def __cinit__(self, TokenType type, str lexeme):
         self.lexeme = lexeme
@@ -170,6 +144,10 @@ cdef inline bint peek_2(wchar_t *buf, Py_ssize_t pos, wchar_t ch1, wchar_t ch2):
     return buf[pos] == ch1 and buf[pos+1] == ch2
 
 
+cdef inline void update_col_pos(Tokenizer t, Py_ssize_t pos):
+    t.pos_col = pos - t._pos_nl
+
+
 cdef class Tokenizer:
     def __init__(self, str prog):
         self.prog = prog
@@ -178,6 +156,10 @@ cdef class Tokenizer:
         self.state = TS_NL
         self.pos = 0
 
+        self.pos_line = 0
+        self._pos_nl = 0
+        self.pos_col = 0
+
     cpdef Token next(self):
         cdef:
             wchar_t *buf = self.buf
@@ -185,6 +167,9 @@ cdef class Tokenizer:
             Py_ssize_t prog_len = self.prog_len
             TokenizerState state = self.state
             Py_ssize_t start
+
+        if pos == self._pos_nl:
+            self.pos_line += 1
 
         while True:
             # print(f"LOOP, state: {tokenizer_state(state)}")
@@ -270,12 +255,15 @@ cdef class Tokenizer:
                 if buf[pos] == '\n':
                     self.pos = pos + 1
                     self.state = TS_NL
-                    return TOK_NEWLINE ## TODO: rename to TOK_NEWLINE after refactor
+                    update_col_pos(self, pos)
+                    self._pos_nl = pos + 1
+                    return TOK_NEWLINE
 
             elif state == TS_EMIT_PREFIX:
                 start = self.pos
                 self.pos = pos
                 self.state = TS_TOPLEVEL
+                update_col_pos(self, start)
                 return Token.__new__(Token, PREFIX, buf[start:pos])
 
             elif state == TS_EMIT_EXPR:
@@ -287,6 +275,7 @@ cdef class Tokenizer:
                     elif buf[pos] == '>' and buf[pos + 1] == '>':
                         self.pos = pos + 2
                         self.state = TS_LINE
+                        update_col_pos(self, start - 2)  # error should reflect delimiter characters (2 chars)
                         return Token.__new__(Token, EXPR, buf[start:pos])
 
                     pos += 1
@@ -315,9 +304,11 @@ cdef class Tokenizer:
                     # prevent empty literal tokens
                     state = self.state
                     continue
+                update_col_pos(self, start)
                 return Token.__new__(Token, LITERAL, buf[start:pos])
 
             elif state == TS_EMIT_CTRL_KW:
+                update_col_pos(self, pos)
                 pos += 1 # consume '%'
                 while pos != prog_len and iswblank(buf[pos]):
                     pos += 1
@@ -344,31 +335,11 @@ cdef class Tokenizer:
                     # No args were given, restart tokenization @ top-level state
                     state = self.state
                     continue
+                update_col_pos(self, start)
                 return Token.__new__(Token, CTRL_ARGS, buf[start:pos])
 
             else:
                 raise RuntimeError(f"unrecognized tokenizer state: {state}")
 
-
-    cpdef Location location(self):
-        """Compute current line and column offset of tokenizer.
-        Returns
-        -------
-            A `Location` object describing the line number and column offset of the tokenizer's current position.
-        """
-        cdef:
-            wchar_t *buf = self.buf
-            size_t end_pos = self.pos
-
-            size_t pos = 0
-
-            size_t line = 1
-            size_t nl_pos = 0
-
-        while pos < end_pos:
-            if buf[pos] == '\n':
-                nl_pos = pos
-                line += 1
-            pos += 1
-
-        return Location(line, end_pos - nl_pos - 1)
+    cpdef location(self):
+        return self.pos_line, self.pos_col

@@ -1,7 +1,8 @@
 import pytest
 from ghostwriter.utils.cogen.tokenizer import (
     Tokenizer,
-    TokenFactory
+    TokenFactory,
+    token_label
 )
 
 NL = TokenFactory.newline()
@@ -140,9 +141,52 @@ def test_tokenizer(msg, prog, toks):
     while True:
         tok = p.next()
         i += 1
-        if i > 100:
-            raise RuntimeError("infinite loop prevention")
+        if i > 1000:
+            raise RuntimeError("infinite loop prevention - tokenizer seems stuck")
         if tok == EOF:
             break
         actual_toks.append(tok)
     assert actual_toks == toks, msg
+
+
+# TODO: test tokenizer location()
+@pytest.mark.parametrize("msg, prog, positions", [
+    ("simple literal",
+     "hello", [("LITERAL", 1, 0)]),
+
+    ("line w 2 literals",
+     "hello, <<thing>>", [("LITERAL", 1, 0), ("EXPR", 1, 7)]),
+
+    ("two lines",
+     "\n".join([
+        "hello, <<thing>>",
+        "also, hello <<other_thing>>"
+     ]), [
+         ("LITERAL", 1, 0), ("EXPR", 1, 7), ("NEWLINE", 1, 16),
+         ("LITERAL", 2, 0), ("EXPR", 2, 12)]),
+
+    ("for block",
+     "\n".join([
+        "  % for x in y",
+        "    something <<x>>",
+        "  % /for"
+     ]), [
+         ("PREFIX", 1, 0), ("CTRL_KW", 1, 2), ("CTRL_ARGS", 1, 8), ("NEWLINE", 1, 14),
+         ("PREFIX", 2, 0), ("LITERAL", 2, 4), ("EXPR", 2, 14), ("NEWLINE", 2, 19),
+         ("PREFIX", 3,0), ("CTRL_KW", 3, 2)]),
+])
+def test_tokenizer_location(msg, prog, positions):
+    p = Tokenizer(prog)
+    result = []
+    i = 0
+    print()
+    while True:
+        tok = p.next()
+        i += 1
+        if i > 1000:
+            raise RuntimeError("infinite loop prevention - tokenizer seems stuck")
+        if tok == EOF:
+            break
+        # print(f"{i} => tok ({repr(tok)}) - loc: ({p.pos_line}, {p.pos_col})")
+        result.append((token_label(tok.type), p.pos_line, p.pos_col))
+    assert result == positions, msg
