@@ -45,6 +45,8 @@ cdef class If(Node):
 
 cdef class Program(Node):
     cpdef public list lines  # type: t.List[Node]
+    cpdef public str file_path
+    cpdef public str component
 
 
 cdef class ParserError(Exception):

@@ -22,6 +22,13 @@ class ResolvError(Exception):
         self.message = message or self.MESSAGE
         super().__init__(f"{self.message} ({self.fqn})")
 
+    def error_message(self):
+        return f"""Error loading snippet '{self.fqn}':
+{self.message}
+
+Remember: In Python, packages are directories containing code while modules are .py files.
+So the snippet 'one.two.three.four' implies the function 'four' in one/two/three.py"""
+
 
 class InvalidLookupPath(ResolvError):
     MESSAGE = "Invalid lookup path"
@@ -56,6 +63,13 @@ class AttrNotFound(ResolvError):
             f"No attribute '{attr}' found in module at '{mod_path}'")
 
 
+class NotAPackage(ResolvError):
+    def __init__(self, mod_path: str, attr: str, notpkg: str):
+        super().__init__(
+            '.'.join([mod_path, attr]),
+            f"'{notpkg}' is not a package, but a module. Do you have too many '.' in your snippet path?")
+
+
 def parse_fqn_identifier(fqn_ident: str) -> t.Tuple[str, str]:
     parts = fqn_ident.strip().split('.')
     if len(parts) == 1:
@@ -65,6 +79,7 @@ def parse_fqn_identifier(fqn_ident: str) -> t.Tuple[str, str]:
 
 
 module_not_found_rgx = re_compile(r"No module named '(?P<module>[a-zA-Z_]\w*)'")
+module_not_a_package = re_compile(r".*'(?P<notpkg>.*)' is not a package")
 
 
 def resolv(fqn_attr: str) -> t.Any:
@@ -88,7 +103,10 @@ def resolv(fqn_attr: str) -> t.Any:
     except ModuleNotFoundError as e:
         match = module_not_found_rgx.match(str(e))
         if not match:
-            raise RuntimeError("Program error: failed to parse error from ModuleNotFoundError") from e
+            match = module_not_a_package.match(str(e))
+            if not match:
+                raise RuntimeError(f"Program error: failed to parse error from ModuleNotFoundError {repr(e)}") from e
+            raise NotAPackage(mod_path, attr, match["notpkg"])
         missing_module = match['module']
         if missing_module in mod_path.split('.'):
             print(f"mod_path '{mod_path}', missing: '{missing_module}', attr: '{attr}'")

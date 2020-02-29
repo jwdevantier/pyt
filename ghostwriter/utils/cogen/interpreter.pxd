@@ -23,6 +23,15 @@ cdef class InterpreterError(Exception):
     pass
 
 
+cdef class InterpStackTrace(InterpreterError):
+    cpdef public int line
+    cpdef public int col
+    cpdef public object reason
+
+    cpdef public str component
+    cpdef public str filepath
+
+
 cdef class RenderArgTypeError(InterpreterError):
     cdef public str expr
     cdef public str typ

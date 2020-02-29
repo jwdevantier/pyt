@@ -211,6 +211,8 @@ cdef class If(Node):
 cdef class Program(Node):
     def __cinit__(self, list lines = None):
         self.lines = lines or []
+        self.file_path = ""
+        self.component = ""
 
     def __eq__(self, other):
         return (

@@ -66,6 +66,31 @@ cdef extern from "wcsenc.h" nogil:
 ################################################################################
 ## Utils
 ################################################################################
+cdef void log_snippet_error(e, str snippet, str fpath):
+    """
+    Print formatted error message, summarizing the details leading to a snippet expansion error.
+    Parameters
+    ----------
+    e:
+        Exception
+    snippet: str
+        snippet string
+    fpath: str
+        path to file being parsed
+
+    Returns
+    -------
+        None
+    """
+    if hasattr(e, "error_message"):
+        error_msg = "\n  ".join(e.error_message().split("\n"))
+    else:
+        error_msg = "\n  ".join(repr(e).split("\n"))
+    log.error(f"""{clr.Style.BRIGHT}{clr.Fore.RED}Error parsing snippet {clr.Fore.MAGENTA}{snippet}{clr.Fore.RED}:{clr.Style.RESET_ALL}
+  {clr.Fore.MAGENTA}Called from: {clr.Style.RESET_ALL}{fpath}
+  {clr.Fore.MAGENTA}Error Type: {clr.Style.RESET_ALL}{type(e).__qualname__}
+  {error_msg}""")
+
 cdef class SnippetCallbackFn:
     cpdef void apply(self, Context ctx, str snippet, str prefix, IWriter fw) except *:
         pass
@@ -602,16 +627,12 @@ cdef class Parser:
         try:
             ctx.on_snippet.apply(ctx, snippet, prefix, fw)
         except Exception as e:
-            log.exception(f"{clr.Style.BRIGHT}{clr.Fore.RED}Fatal error expanding snippet '{clr.Fore.MAGENTA}{snippet}{clr.Fore.RED}'{clr.Style.RESET_ALL}")
-            reason = "error parsing snippet"
-
-            raise GhostwriterSnippetError(
-                snippet, self.line_num, ctx,
-                reason=reason
-            ) from e
+            log.error(f"{clr.Style.BRIGHT}{clr.Fore.RED}Fatal error expanding snippet '{clr.Fore.MAGENTA}{snippet}{clr.Fore.RED}'{clr.Style.RESET_ALL}")
+            log_snippet_error(e, snippet, ctx.src)
+            raise e
         finally:
             if fflush(fw.out) != 0:
-                log.warning("Failed to flush file buffer - some contents may be missing.")
+                log.debug("Failed to flush file buffer - some contents may be missing.")
 
             # ensure snippet ends with a newline
             # (so that snippet end line is printed properly)
@@ -626,7 +647,7 @@ cdef class Parser:
             if read_status:
                 if read_status == READ_ERR:
                     with gil:
-                        log.error(f"fileparser:doparse: got READ_ERR from readline() (outer loop)")
+                        log.debug(f"fileparser:doparse: got READ_ERR from readline() (outer loop)")
                     return PARSE_READ_ERR
                 break
 
@@ -646,7 +667,7 @@ cdef class Parser:
                     #       attempt to read the line again even though EOF?
                     if read_status == READ_ERR:
                         with gil:
-                            log.error(f"fileparser:doparse: got READ_ERR from readline() (inner loop)")
+                            log.debug(f"fileparser:doparse: got READ_ERR from readline() (inner loop)")
                         return PARSE_READ_ERR
                     break
 

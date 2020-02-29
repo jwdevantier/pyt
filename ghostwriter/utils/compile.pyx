@@ -112,35 +112,6 @@ cdef class SnippetUnhandledExceptionError(SnippetError):
             f"Unhandled exception")
 
 
-cdef void print_snippet_error(e: GhostwriterSnippetError) except *:
-    """
-    Print formatted error message, summarizing the details leading to a snippet expansion error.
-    Parameters
-    ----------
-    e : GhostwriterSnippetError
-
-    Returns
-    -------
-        None
-    """
-    cdef SnippetError cause
-    if not isinstance(e.cause, SnippetError):
-        log.info(f"unhandled error (type: {type(e).__name__} while parsing snippet")
-        raise e
-
-    cause = e.cause
-    if cause.__cause__ and isinstance(cause, SnippetUnhandledExceptionError):
-        error = str(cause.__cause__)
-    else:
-        error = cause.message
-    log.info(f"""\
-{clr.Style.BRIGHT}{clr.Fore.RED}Error parsing snippet {clr.Fore.MAGENTA}{cause.module}.{cause.fn_name}{clr.Fore.RED}:{clr.Style.RESET_ALL}
-\t{clr.Fore.MAGENTA}{clr.Style.BRIGHT}Used at:{clr.Style.RESET_ALL} {e.file} (ending at line: {e.line_num})
-\t{clr.Fore.MAGENTA}{clr.Style.BRIGHT}Snippet:{clr.Style.RESET_ALL} from {cause.module} import {cause.fn_name}
-\t{clr.Fore.MAGENTA}{clr.Style.BRIGHT}Reason:{clr.Style.RESET_ALL}  {error}
-""")
-
-
 cdef class ExpandSnippet(SnippetCallbackFn):
     cpdef void apply(self, Context ctx, str snippet, str prefix, IWriter fw) except *:
         cdef object snippet_fn = resolv(snippet)  # LOADS of possible exceptions
@@ -152,9 +123,8 @@ cdef class ExpandSnippet(SnippetCallbackFn):
             if str(e).startswith(f"{fn_name}()"):
                 raise SnippetFunctionSignatureError(snippet) from e
             else:
-                raise SnippetUnhandledExceptionError(snippet) from e
-        except Exception as e:
-            raise SnippetUnhandledExceptionError(snippet) from e
+                log.debug(f"Exception '{type(e).__qualname__}' triggered from resolving/expanding snippet '{snippet}'")
+                raise
 
 
 cdef class CompileFileCallbackFn:
@@ -183,16 +153,10 @@ cdef class SCCompileFileCallbackFn(CompileFileCallbackFn):
         self.num_calls = 0
 
     cpdef void parse_file(self, str fpath) except *:
-        try:
-            out = self.parser.parse(self.on_snippet, fpath)
-            if out:
-                log.error(f"parse() => {out} ({parse_result_err(out)})")
-                log.error(f"in: {fpath}")
-            self.num_calls += 1
-        except GhostwriterSnippetError as e:
-            print_snippet_error(e)
-        except Exception as e:
-            log.exception("parsing - unhandled exception caught:")
+        out = self.parser.parse(self.on_snippet, fpath)
+        if out:
+            log.warning(f"{fpath}: {out}({parse_result_err(out)})")
+        self.num_calls += 1
 
 
 cdef void do_compile_singlecore(parser_conf: ConfParser, CompileWatcher walker,
@@ -260,15 +224,9 @@ cdef class MPCompiler(MPScheduler):
         fpath = jobs.recv()
         # with profiler(f"/tmp/{worker_id}"):
         while fpath != "<stop>":
-            try:
-                out = parser.parse(expand_snippet, fpath)
-                if out:
-                    log.error(f"parse() => {out} ({parse_result_err(out)})")
-                    log.error(f"in: {fpath}")
-            except GhostwriterSnippetError as e:
-                print_snippet_error(e)
-            except Exception as e:
-                log.exception("parsing - unhandled exception caught:")
+            out = parser.parse(expand_snippet, fpath)
+            if out:
+                log.error(f"parse error: {out} ({parse_result_err(out)})\n\tFile: {fpath}")
             fpath = jobs.recv()
 
 

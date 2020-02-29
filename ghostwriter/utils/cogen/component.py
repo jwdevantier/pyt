@@ -1,4 +1,5 @@
 from functools import wraps
+from os import path
 import inspect
 from ghostwriter.utils.cogen.parser import CogenParser, Program
 from ghostwriter.utils.cogen.tokenizer import Tokenizer
@@ -68,4 +69,7 @@ class Component(metaclass=ComponentMeta):
         """Parse Component program text into AST
 
         Lazily parses the component program text into an AST and caches it for future use."""
-        return CogenParser(Tokenizer(deindent_block(cls.template))).parse_program()
+        program = CogenParser(Tokenizer(deindent_block(cls.template))).parse_program()
+        program.file_path = path.abspath(__file__)
+        program.component = cls.__name__
+        return program
