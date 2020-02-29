@@ -23,7 +23,7 @@ cdef class StackErrorCause:
         pass
 
 
-cdef class InterpreterSyntaxError(StackErrorCause):
+cdef class EvalSyntaxError(StackErrorCause):
     cdef:
         str text
         int offset
@@ -36,6 +36,25 @@ cdef class InterpreterSyntaxError(StackErrorCause):
         header = f"Syntax error in: {self.text}"
         err_loc = len(header) - len(self.text) + self.offset - 1   # -1 to make space for ^ character
         return f"""{header}\n{' ' * err_loc}^\n"""
+
+
+cdef class EvalNameError(StackErrorCause):
+    cdef:
+        str expr
+        str message
+        dict scope
+
+    def __init__(self, str expr, str message, dict scope):
+        self.expr = expr
+        self.message = message
+        self.scope = scope
+
+    def error_message(self):
+        pp_vars = "\n  ".join({str(k) for k in self.scope.keys() if k != "__builtins__"})
+        return f"""Error evaluating: {self.message}
+Expression: {self.expr}
+Scope:
+  {pp_vars}"""
 
 
 cdef class InterpStackTrace(InterpreterError):
@@ -149,7 +168,9 @@ cdef py_eval_expr(dict scope, str expr, Py_ssize_t line, Py_ssize_t col):
         return eval_locals['_it']
     except SyntaxError as se:
         # subtract leading 6 characters because they correspond to "_it = "
-        raise InterpStackTrace(line, col, InterpreterSyntaxError(se.text[6:], se.offset - 6)) from se
+        raise InterpStackTrace(line, col, EvalSyntaxError(expr, se.offset - 6)) from se
+    except NameError as ne:
+        raise InterpStackTrace(line, col, EvalNameError(expr, str(ne), scope)) from ne
 
 
 def gen_loop_iterator(str stx, dict scope, Py_ssize_t line, Py_ssize_t col):
