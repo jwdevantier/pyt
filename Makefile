@@ -77,4 +77,5 @@ bin: venv-dev ## build self-contained binary in dist/
 			--nowindow \
 			--onefile \
 			--name gwriter \
+			--additional-hooks-dir=pyinstaller-hooks \
 			ghostwriter/__main__.py
