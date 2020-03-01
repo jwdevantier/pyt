@@ -48,6 +48,8 @@ cdef extern from "stdlib.h" nogil:
     size_t wcstombs(char *dst, const wchar_t *src, size_t len);
 
 cdef extern from "wctype.h" nogil:
+    # all whitespace characters except newlines
+    int iswblank(wchar_t ch ); # wint_t
     int iswspace(wchar_t ch)  # wint_t
     int iswlower(wint_t ch)  #wint_t
 
@@ -570,6 +572,10 @@ cdef class Parser:
         # advance beyond the snippet prefix itself
         start = start + self.tag_open.strlen
 
+        # ... and then skip past leading whitespace
+        while iswblank(start[0]):
+            start += 1
+
         # tag sits at the end of the line-buffer, abort
         if (start - self.line.ptr) >= self.line.buflen:
             # print("snippet_find OOB")
@@ -585,6 +591,10 @@ cdef class Parser:
         if end == NULL:
             # print("snippet_find end")
             return -1
+
+        # ~ .rstrip() - remove trailing whitespace between snippet name and end tag
+        while iswblank(end[-1]):
+            end -= 1
 
         ret = cstr_ncpy_wchar(dst.cstr, start, end - start)
         if ret != 0:
