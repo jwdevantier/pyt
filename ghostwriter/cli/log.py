@@ -1,6 +1,8 @@
 import logging
 from ghostwriter.cli.conf import Configuration
 
+CLI_LOGGER_NAME = "ghostwriter"
+
 
 def configure_logging(conf: Configuration) -> None:
     """Reconfigure root logger to use formats and log level in `conf`."""
