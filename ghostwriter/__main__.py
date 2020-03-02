@@ -6,10 +6,11 @@ import click
 from ghostwriter.cli import conf
 from ghostwriter.cli.log import configure_logging, CLI_LOGGER_NAME
 import ghostwriter.cli.compile as cli_compile
-import ghostwriter.cli.init as cli_init
-import colorama
+from ghostwriter.cli.init import cli_init
+import colorama as clr
 
-colorama.init()
+
+clr.init()
 
 
 def valid_directory(ctx, param, val):
@@ -41,31 +42,18 @@ def cli(ctx, project):
         configure_logging(ctx.obj)
 
 
-@cli.command()
-@click.pass_obj
-def init(config):
-    log = logging.getLogger(CLI_LOGGER_NAME)
+@cli.command(help="create config file and snippets directories")
+def init():
     conf_path = Path(".", conf.CONF_NAME)
     if conf_path.exists():
-        log.error(f"cannot initialize directory - {conf.CONF_NAME} already exists")
+        click.echo(f"cannot initialize directory - {conf.CONF_NAME} already exists")
         sys.exit(1)
-
-    search_paths = ["snippets"]
-    for search_path in search_paths:
-        abs_search_path = Path(".", search_path)
-        try:
-            os.mkdir(abs_search_path.name)
-        except FileExistsError as e:
-            if not abs_search_path.is_dir():
-                raise e  # something exists and its not a directory
-    cli_init.write_configuration(cli_init.ConfDefault(
-        search_paths=search_paths
-    ), {}, conf_path.absolute())
-    sys.exit(0)
+    cli_init(conf_path)
 
 
-@cli.command()
-@click.option('--watch/--no-watch', envvar="GHOSTWRITER_WATCH", default=False)
+@cli.command(help="parse files and expand any snippets")
+@click.option('--watch/--no-watch', envvar="GHOSTWRITER_WATCH", default=False, show_default=True,
+              help="recompile snippets on file changes")
 @click.pass_obj
 def compile(config, watch):
     cli_compile.compile(config, watch)

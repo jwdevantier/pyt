@@ -92,14 +92,17 @@ class Directory(s.SpecBase):
         path: t.Optional[Path] = cls.__value(value)
         if not path:
             return f"expected a path string, got '{type(value)}'"
-        if not path.exists():
+        elif not path.exists():
             return f"directory '{path}' does not exist"
-        return None
+        elif not path.is_dir():
+            return f"path '{path}' is not a directory"
+        else:
+            return None
 
     @classmethod
     def _conform(cls, value: t.Any):
         path: t.Optional[Path] = cls.__value(value)
-        if path and path.exists():
+        if path and path.is_dir():
             return path.as_posix()
         return s.Invalid
 
