@@ -7,6 +7,7 @@ from ghostwriter.cli import conf
 from ghostwriter.cli.log import configure_logging, CLI_LOGGER_NAME
 import ghostwriter.cli.compile as cli_compile
 from ghostwriter.cli.init import cli_init
+from ghostwriter.utils.constants import  *
 import colorama as clr
 
 
@@ -20,6 +21,7 @@ def valid_directory(ctx, param, val):
 
 
 @click.group()
+@click.version_option(GW_VERSION, prog_name=GW_NAME)
 @click.option('--project', envvar='PROJECT', default=os.getcwd(), callback=valid_directory)
 @click.pass_context
 def cli(ctx, project):
