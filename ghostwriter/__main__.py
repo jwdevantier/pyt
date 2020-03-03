@@ -26,6 +26,7 @@ def valid_directory(ctx, param, val):
 @click.pass_context
 def cli(ctx):
     # Basic initialization needed for any command goes here
+    # NOTE: is run before eager commands like'--help'.
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s: %(message)s',
@@ -33,6 +34,22 @@ def cli(ctx):
 
 
 def command(load_config=False, **click_options):
+    """Create a new top-level CLI command.
+
+    Note: initialization which should not run ahead of an eager command
+    (such as --version or --help) should go here.
+
+    Parameters
+    ----------
+    load_config: bool
+        whether to load the Ghostwriter configuration file or not
+    click_options
+        options passed to @click.command
+
+    Returns
+    -------
+        A decorated command function
+    """
     def decorator(fn):
         @cli.command(**click_options)
         @click.option('--project', envvar='PROJECT', default=os.getcwd(), callback=valid_directory, show_default=True,
