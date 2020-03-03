@@ -6,9 +6,10 @@ from functools import wraps
 import click
 from ghostwriter.cli import conf
 from ghostwriter.cli.log import configure_logging, CLI_LOGGER_NAME
+from ghostwriter.cli.cliutils import *
 import ghostwriter.cli.compile as cli_compile
 from ghostwriter.cli.init import cli_init
-from ghostwriter.utils.constants import  *
+from ghostwriter.utils.constants import *
 import colorama as clr
 
 
@@ -64,13 +65,19 @@ def command(load_config=False, **click_options):
             log = logging.getLogger(CLI_LOGGER_NAME)
 
             if load_config:
-                print("LOAD CONFIG")
                 log.info(f"Loading configuration from '{project}'")
-                config = conf.load(Path('.').absolute())
-                configure_logging(config)
-                return fn(config, *args, **kwargs)
+                try:
+                    config = conf.load(Path('.').absolute())
+                    configure_logging(config)
+                    return fn(config, *args, **kwargs)
+                except conf.ConfigurationNotFoundError as e:
+                    click.echo(f"{clr.Style.BRIGHT}{clr.Fore.RED}✖{clr.Style.RESET_ALL} Could not find '{conf.CONF_NAME}' in '{e.project_dir}'")
+                    sys.exit(1)
+                except conf.ConfigurationFileInvalidError as e:
+                    click.echo(fmt_datastructure(e.errors))
+                    echo_err("Errors detected in configuration file. Please correct these and try again")
+                    sys.exit(1)
             else:
-                print("NOT loading command")
                 return fn(*args, **kwargs)
         return wrapper
     return decorator
@@ -80,7 +87,7 @@ def command(load_config=False, **click_options):
 def init():
     conf_path = Path(".", conf.CONF_NAME)
     if conf_path.exists():
-        click.echo(f"cannot initialize directory - {conf.CONF_NAME} already exists")
+        echo_err(f"cannot initialize directory - '{conf.CONF_NAME}' already exists")
         sys.exit(1)
     cli_init(conf_path)
 

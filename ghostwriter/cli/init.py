@@ -5,6 +5,7 @@ import sys
 from multiprocessing import cpu_count
 import click as c
 import colorama as clr
+from ghostwriter.cli.cliutils import *
 from ghostwriter.utils.iwriter import IWriter
 from ghostwriter.utils.cogen import Component
 from ghostwriter.utils.cogen.parser import CogenParser
@@ -166,7 +167,7 @@ def validate_or_retry(validator, prompt_fn, *args, **kwargs):
     result = prompt_fn(*args, **kwargs)
     error = validator(result)
     while error:
-        c.echo(f"Error> {error}")
+        echo_err(error)
         result = prompt_fn(*args, **kwargs)
         error = validator(result)
     return result
@@ -239,7 +240,7 @@ def cli_init(conf_path: Path):
             os_mkdir(abs_search_path.name)
         except FileExistsError:
             if not abs_search_path.is_dir():
-                c.secho(f"Error initializing - '{search_path}' exists but is not a directory", fg="bright_red")
+                echo_err(f"Error initializing - '{search_path}' exists but is not a directory")
                 sys.exit(1)
 
     options = {
