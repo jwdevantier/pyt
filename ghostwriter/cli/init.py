@@ -226,7 +226,7 @@ def cli_init(conf_path: Path):
     c.echo(deindent_block(f"""
     Templates tweak the configuration file's patterns determining what files to include
     or exclude and which directories to skip searching entirely.
-
+    
     These patterns are meant as a quick-start, by all means tweak them to your project."""))
 
     c.echo("\n")
