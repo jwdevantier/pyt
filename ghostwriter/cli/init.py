@@ -145,34 +145,6 @@ def write_configuration(template: Component, scope: dict, fpath: str):
         _render_template(template, scope, fw)
 
 
-B_BLU = f"{clr.Style.BRIGHT}{clr.Fore.BLUE}"
-B_MAG = f"{clr.Style.BRIGHT}{clr.Fore.MAGENTA}"
-B_YEL = f"{clr.Style.BRIGHT}{clr.Fore.YELLOW}"
-CLR = clr.Style.RESET_ALL
-
-
-def _prompt(txt, confirm=True, **kwargs):
-    prompt_txt = f"{clr.Style.BRIGHT}{clr.Fore.GREEN}?{clr.Style.RESET_ALL} {clr.Style.BRIGHT}{txt}{clr.Style.RESET_ALL}"
-    while True:
-        result = c.prompt(prompt_txt, **kwargs)
-        if not confirm or kwargs.get("default", None) == result:
-            break
-        confirm_txt = f"Confirm {B_YEL}{result}{CLR}?"
-        if c.confirm(confirm_txt, default=False, abort=False, prompt_suffix=': ', show_default=True, err=False):
-            break
-    return result
-
-
-def validate_or_retry(validator, prompt_fn, *args, **kwargs):
-    result = prompt_fn(*args, **kwargs)
-    error = validator(result)
-    while error:
-        echo_err(error)
-        result = prompt_fn(*args, **kwargs)
-        error = validator(result)
-    return result
-
-
 def validate_searchpaths(search_paths):
     sps = [sp.strip() for sp in search_paths.split(",")]
     for sp in sps:
@@ -182,13 +154,9 @@ def validate_searchpaths(search_paths):
     return
 
 
-def _header(txt):
-    c.echo(f"\n\n{B_YEL}>>{CLR} {B_BLU}{txt}{CLR}")
-
-
 def cli_init(conf_path: Path):
     options = {}
-    _header("Snippet Tags")
+    echo_header("Snippet Tags")
     c.echo(deindent_block(f"""
     When parsing files. Ghostwriter will look for snippets, places to insert generated output,
     by looking for lines containing both the special opening- and closing tag sequences.
@@ -198,10 +166,10 @@ def cli_init(conf_path: Path):
     '{B_BLU}<@@ /{B_YEL}hello.awesome.world {B_BLU}@@>{CLR}' is replaced by the generated output."""))
 
     c.echo("\n")
-    options["open"] = _prompt("snippet open tag", default="<@@", type=str)
-    options["close"] = _prompt("snippet close tag", default="@@>", type=str)
+    options["open"] = echo_prompt("snippet open tag", default="<@@", type=str)
+    options["close"] = echo_prompt("snippet close tag", default="@@>", type=str)
 
-    _header("Search Paths")
+    echo_header("Search Paths")
     c.echo(deindent_block(f"""
     When looking for snippets such as '{B_YEL}hello.awesome.world{CLR}', Ghostwriter will start
     its search in a series of directories known as `search paths`.
@@ -213,17 +181,17 @@ def cli_init(conf_path: Path):
     c.echo("\n")
     options["search_paths"] = [
         sp.strip() for sp in validate_or_retry(
-            validate_searchpaths, _prompt,
+            validate_searchpaths, echo_prompt,
             "search paths (separate with commas)", default="snippets").split(",")]
 
-    _header("Processes (Concurrency)")
+    echo_header("Processes (Concurrency)")
     c.echo(deindent_block("""
     Ghostwriter will use one or more processes to speed up compilation."""))
 
     c.echo("\n")
-    options["procs"] = _prompt("number of processes", default=max(1, int(cpu_count()/2)), type=int)
+    options["procs"] = echo_prompt("number of processes", default=max(1, int(cpu_count()/2)), type=int)
 
-    _header("Templates")
+    echo_header("Templates")
     c.echo(deindent_block(f"""
     Templates tweak the configuration file's patterns determining what files to include
     or exclude and which directories to skip searching entirely.
@@ -231,7 +199,7 @@ def cli_init(conf_path: Path):
     These patterns are meant as a quick-start, by all means tweak them to your project."""))
 
     c.echo("\n")
-    template = TEMPLATES[_prompt("select template", default="python", type=c.Choice(TEMPLATES.keys()))]
+    template = TEMPLATES[echo_prompt("select template", default="python", type=c.Choice(TEMPLATES.keys()))]
 
     # Done collecting data
     for search_path in options["search_paths"]:

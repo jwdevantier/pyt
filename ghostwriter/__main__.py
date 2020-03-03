@@ -74,7 +74,7 @@ def command(load_config=False, **click_options):
                     click.echo(f"{clr.Style.BRIGHT}{clr.Fore.RED}✖{clr.Style.RESET_ALL} Could not find '{conf.CONF_NAME}' in '{e.project_dir}'")
                     sys.exit(1)
                 except conf.ConfigurationFileInvalidError as e:
-                    click.echo(fmt_datastructure(e.errors))
+                    click.echo(pretty_print(e.errors))
                     echo_err("Errors detected in configuration file. Please correct these and try again")
                     sys.exit(1)
             else:
