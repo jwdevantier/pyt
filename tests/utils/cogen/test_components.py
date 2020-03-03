@@ -8,7 +8,7 @@ from ghostwriter.utils.cogen.interpreter import Writer, interpret
 from ghostwriter.utils.cogen.parser import CogenParser, Program
 from ghostwriter.utils.iwriter import IWriter
 from ghostwriter.parser.fileparser import Context, SnippetCallbackFn
-from ghostwriter.utils.cogen.interpreter import RenderArgTypeError
+from ghostwriter.utils.cogen.interpreter import RenderArgTypeError, InterpreterError
 
 
 prog: Program = CogenParser(Tokenizer("""\
@@ -69,7 +69,7 @@ def test_component_resolution_same_file():
 def test_component_resolution_same_file_err():
     """Ensure an error is raised when failing to render some component"""
 
-    with pytest.raises(NameError) as exc_info:
+    with pytest.raises(InterpreterError) as exc_info:
         snippet_eval(ComponentSnippet(modulea.ComponentResolutionSameFileErr()))
     assert 'DefinitelyNotExistingComponent' in str(exc_info.value)
 
