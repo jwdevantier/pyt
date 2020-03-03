@@ -2,6 +2,7 @@ import os
 import logging
 import sys
 from pathlib import Path
+from functools import wraps
 import click
 from ghostwriter.cli import conf
 from ghostwriter.cli.log import configure_logging, CLI_LOGGER_NAME
@@ -22,29 +23,43 @@ def valid_directory(ctx, param, val):
 
 @click.group()
 @click.version_option(GW_VERSION, prog_name=GW_NAME)
-@click.option('--project', envvar='PROJECT', default=os.getcwd(), callback=valid_directory)
 @click.pass_context
-def cli(ctx, project):
+def cli(ctx):
+    # Basic initialization needed for any command goes here
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s: %(message)s',
         datefmt='%H:%M:%S')
-    log = logging.getLogger(CLI_LOGGER_NAME)
-
-    # We make the project directory our actual working directory.
-    # This has several benefits, among them that relative paths become
-    # relative to the project-root.
-    os.chdir(project)
-
-    # load configuration & configure logging accordingly
-    # (skipped if "init"(-ialising) a new project
-    if ctx.invoked_subcommand != "init":
-        log.info(f"Loading configuration from '{project}'")
-        ctx.obj = conf.load(Path('.').absolute())
-        configure_logging(ctx.obj)
 
 
-@cli.command(help="create config file and snippets directories")
+def command(load_config=False, **click_options):
+    def decorator(fn):
+        @cli.command(**click_options)
+        @click.option('--project', envvar='PROJECT', default=os.getcwd(), callback=valid_directory, show_default=True,
+                      help="the directory containing the configuration, snippets and source code")
+        @wraps(fn)
+        def wrapper(project, *args, **kwargs):
+            # We make the project directory our actual working directory.
+            # This has several benefits, among them that relative paths become
+            # relative to the project-root.
+            os.chdir(project)
+
+            log = logging.getLogger(CLI_LOGGER_NAME)
+
+            if load_config:
+                print("LOAD CONFIG")
+                log.info(f"Loading configuration from '{project}'")
+                config = conf.load(Path('.').absolute())
+                configure_logging(config)
+                return fn(config, *args, **kwargs)
+            else:
+                print("NOT loading command")
+                return fn(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+@command(load_config=False, help="create config file and snippets directories")
 def init():
     conf_path = Path(".", conf.CONF_NAME)
     if conf_path.exists():
@@ -53,10 +68,9 @@ def init():
     cli_init(conf_path)
 
 
-@cli.command(help="parse files and expand any snippets")
+@command(load_config=True, help="parse files and expand any snippets")
 @click.option('--watch/--no-watch', envvar="GHOSTWRITER_WATCH", default=False, show_default=True,
               help="recompile snippets on file changes")
-@click.pass_obj
 def compile(config, watch):
     cli_compile.compile(config, watch)
     sys.exit(0)
