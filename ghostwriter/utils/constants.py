@@ -1,2 +1,2 @@
 GW_NAME = "Ghostwriter"
-GW_VERSION = "0.2.0"
+GW_VERSION = "0.3.0"
