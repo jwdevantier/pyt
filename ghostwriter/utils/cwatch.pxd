@@ -4,9 +4,8 @@ ctypedef object DirEntry
 
 
 cdef class AllWatcher:
-    cdef:
-        dict files
-        str root_path
+    cdef public dict files
+    cdef str root_path
 
     cpdef bint should_watch_dir(self, DirEntry entry)
     cpdef bint should_watch_file(self, DirEntry entry)
