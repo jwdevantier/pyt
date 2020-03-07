@@ -14,6 +14,7 @@ cdef class AllWatcher:
     cpdef void _walk(self, str dir_path, set changes, dict new_files) except *
     cpdef set check(self)
 
+
 cdef class CompileWatcher(AllWatcher):
     cdef:
         object ignore_file

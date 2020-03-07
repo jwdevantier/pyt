@@ -8,7 +8,7 @@ from multiprocessing.connection import Connection
 from watchgod.watcher import Change
 import colorama as clr
 from ghostwriter.utils.fhash cimport file_hash
-from ghostwriter.utils.cwatch cimport AllWatcher, CompileWatcher, SearchPathsWatcher, MPScheduler
+from ghostwriter.utils.cwatch cimport CompileWatcher, SearchPathsWatcher, MPScheduler
 from ghostwriter.cli.conf import Configuration, ConfParser
 from ghostwriter.parser.fileparser cimport Context, Parser, GhostwriterSnippetError, SnippetCallbackFn
 from ghostwriter.parser import parse_result_err
