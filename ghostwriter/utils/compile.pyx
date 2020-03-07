@@ -132,7 +132,7 @@ cdef class CompileFileCallbackFn:
         pass
 
 
-cpdef compile_files(AllWatcher w, CompileFileCallbackFn compiler, path: str):
+cpdef compile_files(CompileWatcher w, CompileFileCallbackFn compiler, str path):
     for entry in scandir(path):
         if entry.is_dir():
             if w.should_watch_dir(entry):
