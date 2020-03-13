@@ -13,22 +13,24 @@ from ghostwriter.utils.iwriter cimport IWriter
 
 log = logging.getLogger(__name__)
 
-# C api docs: https://devdocs.io/c/
 
 ################################################################################
 ## DEFINITIONS
 ################################################################################
-
+# C api docs: https://devdocs.io/c/
 cdef:
     const char *FILE_READ = 'rt'
     const char *FILE_WRITE = 'wt+'
     wchar_t NEWLINE = '\n'
 
+
 ctypedef unsigned int wint_t
 DEF PARSER_LINEBUF_SIZ = 512
 
+
 cdef extern from "stdio.h" nogil:
     char *strstr(const char *haystack, const char *needle)
+
 
 cdef extern from "wchar.h" nogil:
     int wcscmp(const wchar_t *lhs, const wchar_t *rhs);
@@ -44,14 +46,17 @@ cdef extern from "wchar.h" nogil:
 
     size_t WCS_WRITE_ERROR;
 
+
 cdef extern from "stdlib.h" nogil:
     size_t wcstombs(char *dst, const wchar_t *src, size_t len);
+
 
 cdef extern from "wctype.h" nogil:
     # all whitespace characters except newlines
     int iswblank(wchar_t ch ); # wint_t
     int iswspace(wchar_t ch)  # wint_t
     int iswlower(wint_t ch)  #wint_t
+
 
 cdef extern from "wcsenc.h" nogil:
     ctypedef struct wcsenc_t:
@@ -93,6 +98,7 @@ cdef void log_snippet_error(e, str snippet, str fpath):
   {clr.Fore.MAGENTA}Error Type: {clr.Style.RESET_ALL}{type(e).__qualname__}
   {error_msg}""")
 
+
 cdef class SnippetCallbackFn:
     cpdef void apply(self, Context ctx, str snippet, str prefix, IWriter fw) except *:
         pass
@@ -101,6 +107,7 @@ cdef class SnippetCallbackFn:
 cdef class ShouldReplaceFileCallbackFn:
     cpdef bint apply(self, str temp, str orig) except *:
         pass
+
 
 cdef class ShouldReplaceFileAlways(ShouldReplaceFileCallbackFn):
     cpdef bint apply(self, str temp, str orig) except *:
@@ -136,6 +143,7 @@ cdef char *str_py2char(char *cbuf, Py_ssize_t buflen, str pystring):
 cdef class GhostwriterError(Exception):
     pass
 
+
 cdef class GhostwriterSnippetError(GhostwriterError):
     def __init__(self,
                  snippet_name: str,
@@ -166,6 +174,7 @@ cdef struct cstr:
     wchar_t *ptr
     size_t strlen
 
+
 cdef cstr *cstr_new(size_t initial_size) nogil:
     cdef cstr *self = NULL
     if initial_size == 0:
@@ -186,12 +195,14 @@ cdef cstr *cstr_new(size_t initial_size) nogil:
     self.strlen = 0
     return self
 
+
 cdef void cstr_free(cstr *self) nogil:
     if self == NULL:
         return
     if self.ptr != NULL:
         free(self.ptr)
     free(self)
+
 
 cdef int cstr_realloc(cstr *self, size_t n) nogil:
     cdef wchar_t *new_ptr = <wchar_t *> realloc(self.ptr, (n + 1) * sizeof(wchar_t))
@@ -200,6 +211,7 @@ cdef int cstr_realloc(cstr *self, size_t n) nogil:
     self.buflen = n + 1
     self.ptr = new_ptr
     return 0
+
 
 cdef int cstr_ncpy_wchar(cstr *self, wchar_t *src, size_t n) nogil:
     if n >= self.buflen:
@@ -210,23 +222,29 @@ cdef int cstr_ncpy_wchar(cstr *self, wchar_t *src, size_t n) nogil:
     self.strlen = n
     return 0
 
+
 cdef int cstr_ncpy_unicode(cstr *self, unicode s, size_t n):
     cdef:
         wchar_t *src = s
     return cstr_ncpy_wchar(self, src, n)
 
+
 cdef inline void cstr_reset(cstr *self) nogil:
     wmemset(self.ptr, '\0', 1)  # terminate "string"
     self.strlen = 0
 
+
 cdef inline size_t cstr_len(cstr *self) nogil:
     return self.strlen
+
 
 cdef inline size_t cstr_buflen(cstr *self) nogil:
     return self.strlen * sizeof(wchar_t)
 
+
 cdef inline wchar_t *cstr_ptr(cstr *self) nogil:
     return self.ptr
+
 
 cdef unicode cstr_repr(cstr *self):
     if self == NULL:
@@ -247,6 +265,7 @@ cdef struct snippet:
     SNIPPET_TYPE type
     size_t line_num
 
+
 cdef unicode snippet_type(SNIPPET_TYPE t):
     if t == SNIPPET_NONE:
         return "SNIPPET_NONE"
@@ -256,6 +275,7 @@ cdef unicode snippet_type(SNIPPET_TYPE t):
         return "SNIPPET_CLOSE"
     else:
         return "UNKNOWN_SNIPPET"
+
 
 cdef snippet *snippet_new(size_t bufsiz) nogil:
     cdef:
@@ -275,18 +295,22 @@ cdef snippet *snippet_new(size_t bufsiz) nogil:
     self.line_num = 0
     return self
 
+
 cdef inline void snippet_reset(snippet *self) nogil:
     cstr_reset(self.cstr)
     self.type = SNIPPET_NONE
     self.line_num = 0
+
 
 cdef void snippet_free(snippet *self) nogil:
     if self.cstr != NULL:
         cstr_free(self.cstr)
     free(self)
 
+
 cdef inline int snippet_cmp(snippet *lhs, snippet *rhs) nogil:
     return wcscmp(lhs.cstr.ptr, rhs.cstr.ptr)
+
 
 cdef unicode snippet_repr(snippet *self):
     if self == NULL:
@@ -343,6 +367,7 @@ DEF BUF_LINE_LEN = 512
 DEF BUF_SNIPPET_NAME_LEN = 80
 DEF BUF_INDENT_BY_LEN = 40
 
+
 cdef inline int file_write(FILE *fh, wcsenc_t *encoder, wchar_t *str, size_t strlen) nogil:
     cdef:
         size_t encoded = WCS_WRITE_ERROR
@@ -356,6 +381,7 @@ cdef inline int file_write(FILE *fh, wcsenc_t *encoder, wchar_t *str, size_t str
         perror("Write failed. Failed to write encoded string to file")
         return -1
     return 0
+
 
 def parse_result_err(PARSE_RES res) -> str:
     if res == PARSE_OK:
@@ -372,6 +398,7 @@ def parse_result_err(PARSE_RES res) -> str:
         return "open and close tags do not have matching names - nesting error?"
     else:
         return "Unknown parse error!"
+
 
 cdef enum:
     READ_EOF = -1
