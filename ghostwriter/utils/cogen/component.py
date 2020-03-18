@@ -70,6 +70,6 @@ class Component(metaclass=ComponentMeta):
 
         Lazily parses the component program text into an AST and caches it for future use."""
         program = CogenParser(Tokenizer(deindent_block(cls.template))).parse_program()
-        program.file_path = path.abspath(__file__)
+        program.file_path = path.abspath(inspect.getfile(cls))
         program.component = cls.__name__
         return program
