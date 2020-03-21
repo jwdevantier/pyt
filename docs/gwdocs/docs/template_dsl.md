@@ -1,7 +1,6 @@
 # Template DSL
 
-[Snippets](snippets.md) are the most bare-bones way of generating code. A slightly nicer interface, [writers](writer.md), exist which helps writing lines and handling indentation.
-However, in many cases, these approaches are too low-level and involved. In most cases, you will probably prefer the DSL.
+While the raw [Snippets](snippets.md) interface is provided, it is primarily intended as an extension mechanism. The template DSL, which builds on top of the snippet abstraction, is intended as the primary way to implement code generation with Ghostwriter.
 
 ## When to use ?
 The chapter on writing [a template engine](http://aosabook.org/en/500L/a-template-engine.html) from the "500 lines or less" book makes a good point. Programming languages excel when the content is mostly dynamic (e.g. meant to be evaluated), templates excel when the content is mostly static (literal) with bits of dynamic, executable content.
@@ -32,7 +31,7 @@ In ghostwriter, all content in a template which doesn't explicitly escape the te
 
 #### Expressions
 
-The example below uses expressions to evaluate two variables, `var1` and `var2` and render the final template.
+The example below uses expressions to evaluate two variables, `var1` and `var2` and render the final template:
 ```c
 int sum2(int <<var1>>, int <<var2>>) {
     return <<var1>> + <<var2>>;
@@ -89,12 +88,10 @@ What a block does with its argument(s) and its body is entirely up to the block.
     * the format expected depends *entirely* on the type of block
 * the block body:
     * the content between the block start- and end lines
-    * may treat the content as DSL or something else (e.g. XML), it depends on the block's implementation
 * built-in blocks
     * `if` - follows Python's syntax for if-blocks
     * `for` - follows Python's syntax for for-loops
     * `r` - render a Component in place of the block
-* You can write your own blocks, if desired.
 
 ##### if-block
 The `if`-block works *exactly* like a standard Python if:

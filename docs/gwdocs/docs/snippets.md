@@ -1,16 +1,9 @@
 # Snippets
 
-Snippets mark the regions of a file which contain generated code. Snippet syntax is loosely inspired by HTML in that there is a start- tag (e.g. `<@@my_module.my_snippet@@>`) and an end-tag (e.g. `<@@/my_module.my_snippet@@>`). The content between the tags is the output from last executing the snippet.
+Snippets mark the regions of a file which contain generated code. Snippet syntax is loosely inspired by HTML in that there is a start- tag (e.g. `<@@my_module.my_snippet@@>`) and an end-tag (e.g. `<@@/my_module.my_snippet@@>`).
+The content between the tags is the output from last executing the snippet.
 
-A snippet corresponds to some Python function of the form:
-```python
-def my_snippet(ctx: Context, prefix: str, fw: IWriter):
-    ...
-```
-
-The snippet function can write directly to the file via the `IWriter` instance. Everything written via the interface will follow the opening snippet tag. The `prefix` string contains the leading whitespace from the snippet opening line. Use `prefix` to indent each snippet line to match its context.
-
-## Example
+## Snippets resolve to Python functions
 Resolving a snippet name to a Python function closely follows the notation for regular imports. Thus the snippet:
 
 ```text
@@ -24,6 +17,27 @@ Resolving a snippet name to a Python function closely follows the notation for r
 from package1.package2.module import my_snippet
 my_snippet(some_context, '   ', file_handle)
 ```
+
+## Implementing snippets
+
+***Note**: the raw snippet interface is very low-level - you will likely prefer using the [template DSL](template_dsl.md) which provides a convenient, high-level abstraction atop it. This interface is primarily exposed in case you want to build your own abstraction.*
+
+Snippets are functions with the following signature:
+```python
+def my_snippet(ctx: Context, prefix: str, fw: IWriter):
+    pass
+```
+
+* `context: Context`
+    * Provides contextual information - the context object's scope/lifetime matches
+    * `context.src`: The path of the file being processed
+    * `context.env`: A dictionary in which you can store values. The values stored are available to all subsequent snippets in the file.
+* `prefix: str`
+    * Contains the leading whitespace (indentation) of the snippet opening line. Use `prefix` to indent each snippet line to match its context.
+*  `fw: IWriter`
+    * An interface allowing the snippet to write directly to the file via the `.write` method
+    * The output overrides everything which was previously between the snippet's start- and end-tags
+    * You are responsible for inserting newlines (`\n`) and using `prefix` to properly indent lines
 
 Assuming the `my_snippet` implementation is this:
 
@@ -41,14 +55,6 @@ The final output in the file would be:
 something else
    <@@/package1.package2.module.my_snippet@@>
 ```
-
-Some things to note:
-
-* You are responsible for:
-    * Inserting newline characters to separate lines
-    * Using the `prefix` value to indent lines properly
-* A trailing newline will be inserted if your code did not (as in this case)
-* Any contents between the snippet tags is overwritten on next run
 
 
 ## Where to store the snippet code

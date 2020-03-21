@@ -1,3 +1,35 @@
+# When to use code-generation ?
+
+Code generation can be tremendously helpful when applied right. In many projects, there is some unique work, and a lot of boilerplat code.
+
+ I argue significant effort in codebases is spent balancing simplicity and size, continuously refactoring to build architectures which is then refactored and broken down as system requirements change.
+
+
+## Write simpler code
+In general, programming languages often force you to trade code-size for complexity. To achieve the equivalent handled by ORM's like [SQLAlchemy](https://www.sqlalchemy.org) or [Gorm](https://gorm.io) without writing significant amounts of code requires advanced techniques such as data-driven programming or metaprogramming.
+
+An alternative is to naively write out the desired queries and the types into which results are mapped and then generate code to build consistent interfaces, handle querying logic and so on.
+This code, while verbose, will be simpler - the resulting query readily readable, the coercion from database types to program types directly visible. By contrast, systems like SQLAlchemy add their own cognitive overhead, even if solving several problems.
+
+In many cases, common concerns like database management, data validation etc are largely provided by externally maintained libraries, externalizing the burden of writing this relatively complex code. But I argue significant effort in codebases is spent with the same issue, balancing simplicity and size, continuously refactoring to build architectures which is then refactored and broken down as system requirements change.
+
+
+## 
+
+
+
+* Transcending language boundaries
+    * Generating code for multiple programming- and configuration languages from a single source of truth
+
+
+* Overcoming limitations to reuse in DSL's like Ansible and Terraform
+* Generating multiple configuration files from a single source of truth
+* 
+
+
+
+
+
 # Why generate code ?
 In most projects, there is some unique work, and a lot of boilerplate code.
 Code-generation is excellent at reducing boilerplate code such as mapping objects to database tables, validating incoming data, memory allocation and deallocation functions and so on.

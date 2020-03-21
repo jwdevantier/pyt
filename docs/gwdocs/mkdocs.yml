@@ -5,14 +5,14 @@ markdown_extensions:
 - codehilite
 nav:
   - 'Introduction': 'index.md'
-  - 'How it works': 'overview.md'
-  #- 'Getting Started': 'getting_started.md'
-  - 'Why generate code?': 'why.md'
+  - 'Motivation': 'motivation.md'
+  - 'When to generate code?': 'when.md'
+
   - 'Design Choices': 'design_choices.md'
   - Manual:
     # - 'user_overview.md'
     - 'configuration.md'
-    - 'snippets.md'
     - 'template_dsl.md'
-    - 'writer.md'
+    - 'snippets.md'
+    # - 'writer.md' -- expose later, possibly refined
     # - 'specs.md'
