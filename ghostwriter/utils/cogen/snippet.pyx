@@ -6,6 +6,7 @@ from ghostwriter.utils.cogen.parser cimport CogenParser
 from ghostwriter.utils.cogen.tokenizer cimport Tokenizer
 from ghostwriter.utils.cogen.interpreter cimport Writer, interpret
 
+# TODO: tests - had an indentation error in this code.
 
 def snippet(dict blocks: t.Optional[dict] = None):
     """
@@ -40,9 +41,7 @@ def snippet(dict blocks: t.Optional[dict] = None):
             if not isinstance(main_component, Component):
                 raise ValueError(f"snippet must return a Component instance, got '{type(main_component)}'")
             scope = {'__main__': main_component}
-            program = """\
-            % r __main__
-            % /r"""
+            program = f"""{prefix}% r __main__\n{prefix}% /r"""
             parser = CogenParser(Tokenizer(program))
             writer = Writer(file_writer)
             interpret(parser.parse_program(), writer, blocks or {}, scope)
