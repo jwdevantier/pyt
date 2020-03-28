@@ -22,7 +22,7 @@ class ResolvError(Exception):
         self.message = message or self.MESSAGE
         super().__init__(f"{self.message} ({self.fqn})")
 
-    def error_message(self):
+    def error_details(self):
         return f"""Error loading snippet '{self.fqn}':
 {self.message}
 

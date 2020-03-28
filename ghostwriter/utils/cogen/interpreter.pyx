@@ -19,7 +19,7 @@ cdef class InterpreterError(Exception):
 
 
 cdef class StackErrorCause:
-    cpdef error_message(self):
+    cpdef str error_details(self):
         pass
 
 
@@ -32,7 +32,7 @@ cdef class EvalSyntaxError(StackErrorCause):
         self.text = text.rstrip("\n")
         self.offset = offset
 
-    def error_message(self):
+    cpdef str error_details(self):
         header = f"Syntax error in: {self.text}"
         err_loc = len(header) - len(self.text) + self.offset - 1   # -1 to make space for ^ character
         return f"""{header}\n{' ' * err_loc}^\n"""
@@ -49,7 +49,7 @@ cdef class EvalNameError(StackErrorCause):
         self.message = message
         self.scope = scope
 
-    def error_message(self):
+    cpdef str error_details(self):
         pp_vars = "\n  ".join({str(k) for k in self.scope.keys() if k != "__builtins__"})
         return f"""Error evaluating: {self.message}
 Expression: {self.expr}
@@ -67,9 +67,12 @@ cdef class InterpStackTrace(InterpreterError):
         self.component = None
         self.filepath = None
 
-    def __repr__(self):
+    cpdef str error(self):
+        return "Error evaluating DSL in component"
+
+    cpdef str error_details(self):
         if not self.component or not self.filepath and isinstance(self.reason, InterpStackTrace):
-            return repr(self.reason)
+            return self.reason.error_details()
 
         buf = io.StringIO()
         reason = self.reason
@@ -81,9 +84,9 @@ cdef class InterpStackTrace(InterpreterError):
                 buf.write(f"  in {reason.filepath}\n")
                 reason = reason.reason
             else:
-                if hasattr(reason, 'error_message'):
+                if hasattr(reason, 'error_details'):
                     buf.write("Caused by:\n")
-                    buf.write(reason.error_message())
+                    buf.write(reason.error_details())
                 elif isinstance(reason, Exception):
                     buf.write(f"Caused by exception: {type(reason).__qualname__}\n")
                     buf.write(repr(reason))

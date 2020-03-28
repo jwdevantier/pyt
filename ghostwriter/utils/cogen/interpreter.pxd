@@ -31,6 +31,9 @@ cdef class InterpStackTrace(InterpreterError):
     cpdef public str component
     cpdef public str filepath
 
+    cpdef public str error_details(self)
+    cpdef str error(self)
+
 
 cdef class RenderArgTypeError(InterpreterError):
     cdef public str expr
