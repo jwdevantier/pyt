@@ -33,6 +33,7 @@ ghostwriter/utils/cogen/*.c
 ghostwriter/utils/compile.c
 ghostwriter/utils/ctext.c
 ghostwriter/utils/cwatch.c
+ghostwriter/utils/error.c
 ghostwriter/utils/fhash.c
 ghostwriter/utils/iwriter.c
 

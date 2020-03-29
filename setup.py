@@ -109,6 +109,7 @@ setup(
         Extension("ghostwriter.utils.ctext", ["ghostwriter/utils/ctext.pyx"]),
         Extension("ghostwriter.utils.cwatch", ["ghostwriter/utils/cwatch.pyx"]),
         Extension("ghostwriter.utils.compile", ["ghostwriter/utils/compile.pyx"]),
+        Extension("ghostwriter.utils.error", ["ghostwriter/utils/error.pyx"]),
         Extension("ghostwriter.utils.cogen.tokenizer", ["ghostwriter/utils/cogen/tokenizer.pyx"]),
         Extension("ghostwriter.utils.cogen.interpreter", ["ghostwriter/utils/cogen/interpreter.pyx"]),
         Extension("ghostwriter.utils.cogen.snippet", ["ghostwriter/utils/cogen/snippet.pyx"]),

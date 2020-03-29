@@ -1,9 +1,9 @@
 import typing as t
 import io
 import colorama as clr
+from re import compile as re_compile
 cimport cython
 from ghostwriter.utils.cogen.component import Component
-from re import compile as re_compile
 
 # TODO: want a 'def'/'set' block to update scope - can call out to functions..?
 
@@ -18,12 +18,7 @@ cdef class InterpreterError(Exception):
     pass
 
 
-cdef class StackErrorCause:
-    cpdef str error_details(self):
-        pass
-
-
-cdef class EvalSyntaxError(StackErrorCause):
+cdef class EvalSyntaxError(EvalError):
     cdef:
         str text
         int offset
@@ -32,15 +27,19 @@ cdef class EvalSyntaxError(StackErrorCause):
         self.text = text.rstrip("\n")
         self.offset = offset
 
+    cpdef str error_message(self):
+        return "syntax error evaluating expression in template"
+
     cpdef str error_details(self):
-        header = f"Syntax error in: {self.text}"
+        header = f"syntax error in: {self.text}"
         err_loc = len(header) - len(self.text) + self.offset - 1   # -1 to make space for ^ character
         return f"""{header}\n{' ' * err_loc}^\n"""
 
 
-cdef class EvalNameError(StackErrorCause):
+cdef class EvalNameError(EvalError):
     cdef:
         str expr
+        # str(e) where e is a NameError, example: "name 'helx' is not defined"
         str message
         dict scope
 
@@ -49,16 +48,19 @@ cdef class EvalNameError(StackErrorCause):
         self.message = message
         self.scope = scope
 
+    cpdef str error_message(self):
+        return self.message
+
     cpdef str error_details(self):
-        pp_vars = "\n  ".join({str(k) for k in self.scope.keys() if k != "__builtins__"})
+        pp_vars = "\n  ".join([f"{str(k)}: <{type(v).__qualname__}>" for k,v in self.scope.items() if k != "__builtins__"])
         return f"""Error evaluating: {self.message}
 Expression: {self.expr}
 Scope:
   {pp_vars}"""
 
 
-cdef class InterpStackTrace(InterpreterError):
-    def __init__(self, Py_ssize_t line, Py_ssize_t col, object reason):
+cdef class InterpStackTrace(EvalError):
+    def __init__(self, Py_ssize_t line, Py_ssize_t col, EvalError reason):
         self.line = line
         self.col = col
         self.reason = reason
@@ -67,8 +69,8 @@ cdef class InterpStackTrace(InterpreterError):
         self.component = None
         self.filepath = None
 
-    cpdef str error(self):
-        return "Error evaluating DSL in component"
+    cpdef str error_message(self):
+        return self.reason.error_message()
 
     cpdef str error_details(self):
         if not self.component or not self.filepath and isinstance(self.reason, InterpStackTrace):
@@ -174,6 +176,8 @@ cdef py_eval_expr(dict scope, str expr, Py_ssize_t line, Py_ssize_t col):
         raise InterpStackTrace(line, col, EvalSyntaxError(expr, se.offset - 6)) from se
     except NameError as ne:
         raise InterpStackTrace(line, col, EvalNameError(expr, str(ne), scope)) from ne
+    except Exception as e:
+        raise InterpStackTrace(line, col, WrappedException()) from e
 
 
 def gen_loop_iterator(str stx, dict scope, Py_ssize_t line, Py_ssize_t col):

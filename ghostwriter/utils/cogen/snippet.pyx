@@ -1,42 +1,22 @@
 import typing as t
 from functools import wraps
-import traceback
-import sys
 from ghostwriter.utils.iwriter cimport IWriter
 from ghostwriter.utils.cogen.component import Component
 from ghostwriter.utils.cogen.parser cimport CogenParser
 from ghostwriter.utils.cogen.tokenizer cimport Tokenizer
 from ghostwriter.utils.cogen.interpreter cimport Writer, interpret
+from ghostwriter.utils.error cimport WrappedException
 
 # TODO: tests - had an indentation error in this code.
 
 
-cdef class SnippetEvalException(Exception):
-    """Wrap raised exception and format it for subsequent display.
-
-    Wraps exception and implement methods expected by the error logger in `fileparser.pyx`.
-    By rendering the stacktrace as-is we avoid showing additional stack frames pertaining to the
-    internals of Ghostwriter."""
-
+class SnippetEvalException(WrappedException):
     def __init__(self):
-        # NOTE: this exception expects to be created INSIDE an exception block
-        cls, inst, tb = sys.exc_info()
-        self._error = f"{cls.__qualname__}: {str(inst)}"
-        super().__init__(self._error)
-        tb_lines = traceback.format_tb(tb)
-        # This accomplishes two things:
-        # 1) strips the first string from tb_lines which corresponds to the outermost
-        #    stack frame (from snippet.pyx itself)
-        #    (Desirable as the user should only see the part of the stacktrace relevant to the his error)
-        # 2) Writes the string which is shown when an exceptions stack trace is being printed.
-        tb_lines[0] = f"Traceback (most recent call last):\n"
-        self._error_details = "".join(tb_lines)
-
-    cpdef str error_details(self):
-        return self._error_details
-
-    cpdef str error(self):
-        return self._error
+        super().__init__()
+        # remove the outermost stack frame which will point to this file. We only wrap the
+        # exception to present a nicer format to the error logger in `fileparser.pyx`.
+        # Hence, the frame pointing to here is not necessary.
+        self.stacktrace_lines.pop(1)
 
 
 def snippet(dict blocks: t.Optional[dict] = None):

@@ -7,7 +7,6 @@ from os.path import expanduser
 import io
 import logging
 from ghostwriter.utils import spec as s
-from ghostwriter.utils.error import GhostwriterError
 
 log = logging.getLogger(__file__)
 
@@ -20,6 +19,10 @@ GW_CONF_LOGGING_SPEC = s.keys({
     'format': s.opt(s.str, '%(asctime)s - %(message)s'),
     'datefmt': s.opt(s.str, '%Y-%m-%d %H:%M:%S')
 })
+
+
+class GhostwriterConfigurationError(Exception):
+    pass
 
 
 def _natint(value):
@@ -137,7 +140,7 @@ GW_CONF_SPEC = s.keys({
 
 # TODO: improve - in particular, the error formatting needs to show the data and
 #       the error
-class SpecError(GhostwriterError):
+class SpecError(GhostwriterConfigurationError):
     def __init__(self, spec: s.Spec, value: t.Any):
         self.spec = spec
         self.value = value
@@ -206,7 +209,7 @@ class Configuration:
             ">")
 
 
-class ConfigurationNotFoundError(GhostwriterError):
+class ConfigurationNotFoundError(GhostwriterConfigurationError):
     def __init__(self, project_dir: Path):
         self.project_dir = project_dir
         super().__init__(f"Could not find '{CONF_NAME}' in '{project_dir}'")

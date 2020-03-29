@@ -4,6 +4,7 @@ from ghostwriter.utils.iwriter cimport IWriter
 from ghostwriter.utils.cogen.parser cimport (
     Program, Block, If, Line, Literal, Expr, Node
 )
+from ghostwriter.utils.error cimport WrappedException, EvalError
 
 
 cdef class Writer(IWriter):
@@ -23,16 +24,13 @@ cdef class InterpreterError(Exception):
     pass
 
 
-cdef class InterpStackTrace(InterpreterError):
+cdef class InterpStackTrace(EvalError):
     cpdef public int line
     cpdef public int col
-    cpdef public object reason
+    cpdef public EvalError reason
 
     cpdef public str component
     cpdef public str filepath
-
-    cpdef public str error_details(self)
-    cpdef str error(self)
 
 
 cdef class RenderArgTypeError(InterpreterError):
