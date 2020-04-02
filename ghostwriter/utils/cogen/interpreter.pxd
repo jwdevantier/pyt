@@ -4,7 +4,7 @@ from ghostwriter.utils.iwriter cimport IWriter
 from ghostwriter.utils.cogen.parser cimport (
     Program, Block, If, Line, Literal, Expr, Node
 )
-from ghostwriter.utils.error cimport WrappedException, EvalError
+from ghostwriter.utils.error cimport *
 
 
 cdef class Writer(IWriter):
@@ -20,29 +20,29 @@ cdef class Writer(IWriter):
     cpdef void newline(self)
 
 
-cdef class InterpreterError(Exception):
-    pass
+cdef class EvalError(Error):
+    cpdef public ExceptionInfo ei
 
 
-cdef class InterpStackTrace(EvalError):
+cdef class InterpStackTrace(Error):
     cpdef public int line
     cpdef public int col
-    cpdef public EvalError reason
+    cpdef public Error reason
 
     cpdef public str component
     cpdef public str filepath
 
 
-cdef class RenderArgTypeError(InterpreterError):
+cdef class RenderArgTypeError(Error):
     cdef public str expr
     cdef public str typ
 
 
-cdef class UnknownNodeType(InterpreterError):
+cdef class UnknownNodeType(Error):
     cdef public Node node
 
 
-cdef class UnknownBlockType(InterpreterError):
+cdef class UnknownBlockType(Error):
     cdef public Block block
 
 

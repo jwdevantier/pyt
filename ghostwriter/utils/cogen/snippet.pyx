@@ -5,18 +5,18 @@ from ghostwriter.utils.cogen.component import Component
 from ghostwriter.utils.cogen.parser cimport CogenParser
 from ghostwriter.utils.cogen.tokenizer cimport Tokenizer
 from ghostwriter.utils.cogen.interpreter cimport Writer, interpret
-from ghostwriter.utils.error cimport WrappedException
+from ghostwriter.utils.error cimport WrappedException, ExceptionInfo, catch_exception_info
 
 # TODO: tests - had an indentation error in this code.
 
 
 class SnippetEvalException(WrappedException):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, ExceptionInfo ei):
         # remove the outermost stack frame which will point to this file. We only wrap the
         # exception to present a nicer format to the error logger in `fileparser.pyx`.
         # Hence, the frame pointing to here is not necessary.
-        self.stacktrace_lines.pop(1)
+        ei.stacktrace.pop(0)
+        super().__init__(ei)
 
 
 def snippet(dict blocks: t.Optional[dict] = None):
@@ -58,7 +58,7 @@ def snippet(dict blocks: t.Optional[dict] = None):
 
                 # wrap exception in a custom exception whose error_details attribute ensures only the
                 # relevant parts of the stack trace are printed to the user.
-                raise SnippetEvalException() from e
+                raise SnippetEvalException(catch_exception_info()) from e
 
             if not isinstance(main_component, Component):
                 # TODO: improve this - error stack trace should not show ghostwriter internals

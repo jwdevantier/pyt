@@ -2,6 +2,8 @@ import typing as t
 import io
 import colorama as clr
 from re import compile as re_compile
+import traceback
+import sys
 cimport cython
 from ghostwriter.utils.cogen.component import Component
 
@@ -14,11 +16,19 @@ cdef inline str type_name(object o):
     return type(o).__name__
 
 
-cdef class InterpreterError(Exception):
-    pass
+cdef class EvalError(Error):
+    def __init__(self, ExceptionInfo ei):
+        super().__init__(ei.error_message())
+        self.ei = ei
+
+    cpdef str error_details(self):
+        return self.ei.error_details()
+
+    cpdef str error_message(self):
+        return self.ei.error_message()
 
 
-cdef class EvalSyntaxError(EvalError):
+cdef class EvalSyntaxError(Error):
     cdef:
         str text
         int offset
@@ -36,31 +46,8 @@ cdef class EvalSyntaxError(EvalError):
         return f"""{header}\n{' ' * err_loc}^\n"""
 
 
-cdef class EvalNameError(EvalError):
-    cdef:
-        str expr
-        # str(e) where e is a NameError, example: "name 'helx' is not defined"
-        str message
-        dict scope
-
-    def __init__(self, str expr, str message, dict scope):
-        self.expr = expr
-        self.message = message
-        self.scope = scope
-
-    cpdef str error_message(self):
-        return self.message
-
-    cpdef str error_details(self):
-        pp_vars = "\n  ".join([f"{str(k)}: <{type(v).__qualname__}>" for k,v in self.scope.items() if k != "__builtins__"])
-        return f"""Error evaluating: {self.message}
-Expression: {self.expr}
-Scope:
-  {pp_vars}"""
-
-
-cdef class InterpStackTrace(EvalError):
-    def __init__(self, Py_ssize_t line, Py_ssize_t col, EvalError reason):
+cdef class InterpStackTrace(Error):
+    def __init__(self, Py_ssize_t line, Py_ssize_t col, Error reason):
         self.line = line
         self.col = col
         self.reason = reason
@@ -73,6 +60,7 @@ cdef class InterpStackTrace(EvalError):
         return self.reason.error_message()
 
     cpdef str error_details(self):
+        cdef str details
         if not self.component or not self.filepath and isinstance(self.reason, InterpStackTrace):
             return self.reason.error_details()
 
@@ -85,36 +73,31 @@ cdef class InterpStackTrace(EvalError):
                 buf.write(f"Caused by component {clr.Style.BRIGHT}{clr.Fore.GREEN}{reason.component}{clr.Style.RESET_ALL}, line {clr.Style.BRIGHT}{clr.Fore.CYAN}{reason.line}{clr.Style.RESET_ALL}, offset {clr.Style.BRIGHT}{clr.Fore.CYAN}{reason.col}{clr.Style.RESET_ALL}\n")
                 buf.write(f"  in {reason.filepath}\n")
                 reason = reason.reason
-            else:
-                if hasattr(reason, 'error_details'):
-                    buf.write("Caused by:\n")
-                    buf.write(reason.error_details())
-                elif isinstance(reason, Exception):
-                    buf.write(f"Caused by exception: {type(reason).__qualname__}\n")
-                    buf.write(repr(reason))
-                else:
-                    buf.write(f"Caused by:\n")
-                    buf.write(repr(reason))
-                buf.write("\n")
+            elif isinstance(reason, Error) or hasattr(reason, "error_details"):
+                details = reason.error_details()
+                if details:
+                    buf.write(details)
                 break
+            else:
+                raise RuntimeError(f"Unsupported error value: {repr(reason)}")
         return buf.getvalue()
 
 
-cdef class RenderArgTypeError(InterpreterError):
+cdef class RenderArgTypeError(Error):
     def __init__(self, str expr, object obj):
         self.expr = expr
         self.typ = type_name(obj)
         super().__init__(f"render block expects component, but '{expr}' evaluated to '{self.typ}'")
 
 
-cdef class UnknownNodeType(InterpreterError):
+cdef class UnknownNodeType(Error):
     def __init__(self, Node n):
         cdef str msg = f"Unknown node '{type_name(n)}'"
         self.node = n
         super().__init__(msg)
 
 
-cdef class UnknownBlockType(InterpreterError):
+cdef class UnknownBlockType(Error):
     def __init__(self, Block b):
         cdef str msg = f"Unknown block type '{b.keyword}' not supported"
         self.block = b
@@ -168,17 +151,28 @@ cdef py_eval_expr(dict scope, str expr, Py_ssize_t line, Py_ssize_t col):
         The resulting value from evaluating the expression.
     """
     cdef dict eval_locals = dict()
+    cdef ExceptionInfo ei
     try:
         exec(f"_it = {expr}", scope, eval_locals)
         return eval_locals['_it']
-    except SyntaxError as se:
-        # subtract leading 6 characters because they correspond to "_it = "
-        raise InterpStackTrace(line, col, EvalSyntaxError(expr, se.offset - 6)) from se
-    except NameError as ne:
-        raise InterpStackTrace(line, col, EvalNameError(expr, str(ne), scope)) from ne
     except Exception as e:
-        raise InterpStackTrace(line, col, WrappedException()) from e
+        if isinstance(e, SyntaxError):
+            print("py_eval_expr exception stx error")
+            # subtract leading 6 characters because they correspond to "_it = "
+            raise InterpStackTrace(line, col, EvalSyntaxError(expr, e.offset - 6)) from e
+        print("py_eval_expr exception else")
+        ei = catch_exception_info()
+        trim_eval_frames(ei)
+        raise InterpStackTrace(line, col, EvalError(ei)) from e
 
+cdef trim_eval_frames(ExceptionInfo ei):
+    cdef FrameInfo f
+    cdef int ndx = 0
+    for f in ei.stacktrace:
+        if f.filename == "<string>":
+            ei.stacktrace = ei.stacktrace[ndx+1:]
+            break
+        ndx += 1
 
 def gen_loop_iterator(str stx, dict scope, Py_ssize_t line, Py_ssize_t col):
     """Transforms for statement into an iterable returning a dictionary of loop-specific bindings

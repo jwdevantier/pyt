@@ -7,9 +7,10 @@ from posix.stdio cimport (ftello, fileno)
 from posix.unistd cimport (ftruncate)
 from os import replace as os_replace, remove as os_remove
 import logging
+import traceback
 import colorama as clr
 from ghostwriter.utils.iwriter cimport IWriter
-from ghostwriter.utils.error cimport EvalError
+from ghostwriter.utils.error cimport Error
 
 
 log = logging.getLogger(__name__)
@@ -91,14 +92,15 @@ cdef void log_snippet_error(e, str snippet, str fpath):
         None
     """
     # some errors have an error_details() method, for others, we use repr
-    error_details = "\n  ".join((e.error_details() if isinstance(e, EvalError) or hasattr(e, "error_details") else repr(e)).split("\n"))
-    if isinstance(e, EvalError) or hasattr(e, "error_message"):
+    error_details = "\n  ".join((e.error_details() if isinstance(e, Error) or hasattr(e, "error_details") else traceback.format_exc()).split("\n"))
+    if isinstance(e, Error) or hasattr(e, "error_message"):
         error_message = e.error_message()
     else:
         error_message = f"{str(e)} (Type: {type(e).__qualname__})"
     log.error(f"""{clr.Style.BRIGHT}{clr.Fore.RED}Error parsing snippet {clr.Fore.MAGENTA}{snippet}{clr.Fore.RED}:{clr.Style.RESET_ALL}
   {clr.Fore.MAGENTA}Called from: {clr.Style.RESET_ALL}{fpath}
   {clr.Fore.MAGENTA}Error: {clr.Style.RESET_ALL}{error_message}
+  {clr.Fore.MAGENTA}Traceback (most recent call last):{clr.Style.RESET_ALL}
   {error_details}""")
 
 

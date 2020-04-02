@@ -1,29 +1,88 @@
-import traceback
 import sys
+import traceback
+from re import compile as re_compile, S as re_S
+from io import StringIO
 
-cdef class EvalError(Exception):
+
+rgx = re_compile(r"""\s*File "(?P<filename>.*?)", line (?P<lineno>\d+), in (?P<name>\S*)\n(?:(?P<line>.*))\n*""", re_S)
+
+
+cdef class Error(Exception):
     cpdef str error_message(self):
-        return ""
+        raise NotImplementedError("error_message not implemented")
+
     cpdef str error_details(self):
-        return ""
+        raise NotImplementedError("error_details not implemented")
 
 
-cdef class WrappedException(EvalError):
+cdef class FrameInfo:
+    def __init__(self, str filename, int lineno, str name, str line = None):
+        self.filename = filename
+        self.lineno = lineno
+        self.name = name
+        self.line = line
+
+    def __str__(self):
+        if self.line:
+            return f"""File "{self.filename}", line {self.lineno}, in {self.name}\n    {self.line}\n"""
+        return f"""File "{self.filename}", line {self.lineno}, in {self.name}\n"""
+
+    def __repr__(self):
+        return f"<FrameInfo filename: {self.filename}, lineno: {self.lineno}, name: {self.name}, line: {self.line}>"
+
+
+cdef list parse_traceback(object tb):
+    cdef list stack = []
+    cdef str line
+    for line in traceback.format_tb(tb):
+        m = rgx.match(line)
+        if not m:
+            raise RuntimeError("failed to match line")
+        stack.append(FrameInfo(m["filename"], int(m["lineno"]), m["name"], m["line"][:-1]))
+    return stack
+
+
+cdef class ExceptionInfo:
+    def __cinit__(self, Exception exc, list stacktrace):
+        self.exc = exc
+        self.stacktrace = stacktrace
+        self._error_message = f"{type(exc).__qualname__}: {str(exc)}"
+
+    cpdef str error_message(self):
+        return self._error_message
+
+    cpdef str error_details(self):
+        cdef FrameInfo f
+        # in some cases the stacktrace is empty.
+        # typically happens when an error happens at top-level (e.g. evaluating a string value)
+        if not self.stacktrace:
+            return ""
+
+        with StringIO() as buf:
+            # buf.write("Traceback (most recent call last):\n")
+            for f in self.stacktrace:
+                buf.write(str(f))
+            return buf.getvalue()
+
+    def __repr__(self):
+        return f"<{repr(self.exc)}, stack: {repr(self.stacktrace)}>"
+
+
+cpdef ExceptionInfo catch_exception_info():
+    _, exc, tb = sys.exc_info()
+    return ExceptionInfo(exc, parse_traceback(tb))
+
+cdef class WrappedException(Error):
     """Wrap raised exception and format it for subsequent display.
 
     Wraps exception and implement methods used elsewhere to pretty-print exceptions."""
 
-    def __init__(self):
-        # NOTE: this exception expects to be created INSIDE an exception block
-        cls, inst, tb = sys.exc_info()
-        self._error = f"{cls.__qualname__}: {str(inst)}"
-        super().__init__(self._error)
-        self.stacktrace_lines = traceback.format_tb(tb)
-        # Python exceptions are rendered with this line at the start of the stack trace
-        self.stacktrace_lines.insert(0, "Traceback (most recent call last):\n")
+    def __init__(self, ExceptionInfo ei):
+        super().__init__(ei.error_message())
+        self.ei = ei
 
     cpdef str error_details(self):
-        return "".join(self.stacktrace_lines)
+        return self.ei.error_details()
 
     cpdef str error_message(self):
-        return self._error
+        return self.ei.error_message()
