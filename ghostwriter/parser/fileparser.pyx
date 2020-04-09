@@ -412,7 +412,7 @@ cdef enum:
     READ_LINE_TOO_LONG = 2
 
 
-def post_process_noop(fpath_parsed: str):
+def post_process_noop(fpath_orig: str, fpath_parsed: str):
     """
     Default parser post-processing function.
 
@@ -752,5 +752,5 @@ cdef class Parser:
                 if self.fh_out != NULL:
                     fclose(self.fh_out)
                     self.fh_out = NULL
-                os_replace(self.post_process(self.temp_file_path), fpath)
+                os_replace(self.post_process(fpath, self.temp_file_path), fpath)
             return parse_result
