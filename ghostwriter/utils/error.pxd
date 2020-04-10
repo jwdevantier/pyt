@@ -7,6 +7,10 @@ cdef class Error(Exception):
     cpdef str error_details(self)
 
 
+cpdef str error_details(e, str indentation = ?)
+cpdef str error_message(e)
+
+
 cdef class FrameInfo:
     # name of file containing code (or "<string>")
     cpdef public str filename

@@ -10,7 +10,7 @@ import logging
 import traceback
 import colorama as clr
 from ghostwriter.utils.iwriter cimport IWriter
-from ghostwriter.utils.error cimport Error
+from ghostwriter.utils.error cimport Error, error_message, error_details
 
 
 log = logging.getLogger(__name__)
@@ -91,17 +91,11 @@ cdef void log_snippet_error(e, str snippet, str fpath):
     -------
         None
     """
-    # some errors have an error_details() method, for others, we use repr
-    error_details = "\n  ".join((e.error_details() if isinstance(e, Error) or hasattr(e, "error_details") else traceback.format_exc()).split("\n"))
-    if isinstance(e, Error) or hasattr(e, "error_message"):
-        error_message = e.error_message()
-    else:
-        error_message = f"{str(e)} (Type: {type(e).__qualname__})"
     log.error(f"""{clr.Style.BRIGHT}{clr.Fore.RED}Error parsing snippet {clr.Fore.MAGENTA}{snippet}{clr.Fore.RED}:{clr.Style.RESET_ALL}
   {clr.Fore.MAGENTA}Called from: {clr.Style.RESET_ALL}{fpath}
-  {clr.Fore.MAGENTA}Error: {clr.Style.RESET_ALL}{error_message}
+  {clr.Fore.MAGENTA}Error: {clr.Style.RESET_ALL}{error_message(e)}
   {clr.Fore.MAGENTA}Traceback (most recent call last):{clr.Style.RESET_ALL}
-  {error_details}""")
+  {error_details(e)}""")
 
 
 cdef class SnippetCallbackFn:

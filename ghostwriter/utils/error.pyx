@@ -15,6 +15,19 @@ cdef class Error(Exception):
         raise NotImplementedError("error_details not implemented")
 
 
+cpdef str error_details(e, str indentation = "  "):
+    return f"\n{indentation}".join(
+        (e.error_details()
+         if isinstance(e, Error) or hasattr(e, "error_details")
+         else traceback.format_exc()).split("\n"))
+
+
+cpdef str error_message(e):
+    if isinstance(e, Error) or hasattr(e, "error_message"):
+        return e.error_message()
+    return f"{str(e)} (Type: {type(e).__qualname__})"
+
+
 cdef class FrameInfo:
     def __init__(self, str filename, int lineno, str name, str line = None):
         self.filename = filename
