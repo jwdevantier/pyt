@@ -7,10 +7,9 @@ from posix.stdio cimport (ftello, fileno)
 from posix.unistd cimport (ftruncate)
 from os import replace as os_replace, remove as os_remove
 import logging
-import traceback
 import colorama as clr
 from ghostwriter.utils.iwriter cimport IWriter
-from ghostwriter.utils.error cimport Error, error_message, error_details
+from ghostwriter.utils.error cimport error_message, error_details
 
 
 log = logging.getLogger(__name__)
