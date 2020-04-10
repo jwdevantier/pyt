@@ -157,10 +157,8 @@ cdef py_eval_expr(dict scope, str expr, Py_ssize_t line, Py_ssize_t col):
         return eval_locals['_it']
     except Exception as e:
         if isinstance(e, SyntaxError):
-            print("py_eval_expr exception stx error")
             # subtract leading 6 characters because they correspond to "_it = "
             raise InterpStackTrace(line, col, EvalSyntaxError(expr, e.offset - 6)) from e
-        print("py_eval_expr exception else")
         ei = catch_exception_info()
         trim_eval_frames(ei)
         raise InterpStackTrace(line, col, EvalError(ei)) from e
