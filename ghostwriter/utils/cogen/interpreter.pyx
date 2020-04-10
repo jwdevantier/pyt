@@ -2,8 +2,6 @@ import typing as t
 import io
 import colorama as clr
 from re import compile as re_compile
-import traceback
-import sys
 cimport cython
 from ghostwriter.utils.cogen.component import Component
 
