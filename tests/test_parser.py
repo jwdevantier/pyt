@@ -184,10 +184,9 @@ def test_write_inplace_ok(tmpfile, mode, contents):
         input_contents.flush()
         input_fname = input_contents.name
     parser = Parser(tmp_file_path('/tmp/', '.gw.tmp'), '<@@', '@@>')
-    retval = parser.parse(
+    parser.parse(
         ExpandSnippet(),
         input_fname)
-    assert retval == PARSE_OK, "expected parsing to work"
 
     with open(input_fname) as fh:
         actual_contents = fh.read()
@@ -208,10 +207,10 @@ def test_write_inplace_errs(tmpfile, contents):
     parser = Parser(tmp_file_path('/tmp/', '.gw.tmp'), '<@@', '@@>')
     print("Input program:\n------------\n\n")
     print(contents)
-    retval = parser.parse(
-        ExpandSnippet(),
-        input_fname)
-    assert retval != PARSE_OK, "expected parsing to fail"
+    with pytest.raises(ParseError):
+        parser.parse(
+            ExpandSnippet(),
+            input_fname)
 
     with open(input_fname) as fh:
         actual_contents = fh.read()

@@ -1,4 +1,5 @@
 # cython: language_level=3, boundscheck=False
+import typing as t
 from libc.stdlib cimport malloc, free, realloc
 from libc.string cimport memcpy
 from libc.locale cimport setlocale, LC_ALL
@@ -74,29 +75,6 @@ cdef extern from "wcsenc.h" nogil:
 ################################################################################
 ## Utils
 ################################################################################
-cdef void log_snippet_error(e, str snippet, str fpath):
-    """
-    Print formatted error message, summarizing the details leading to a snippet expansion error.
-    Parameters
-    ----------
-    e:
-        Exception
-    snippet: str
-        snippet string
-    fpath: str
-        path to file being parsed
-
-    Returns
-    -------
-        None
-    """
-    log.error(f"""{clr.Style.BRIGHT}{clr.Fore.RED}Error parsing snippet {clr.Fore.MAGENTA}{snippet}{clr.Fore.RED}:{clr.Style.RESET_ALL}
-  {clr.Fore.MAGENTA}Called from: {clr.Style.RESET_ALL}{fpath}
-  {clr.Fore.MAGENTA}Error: {clr.Style.RESET_ALL}{error_message(e)}
-  {clr.Fore.MAGENTA}Traceback (most recent call last):{clr.Style.RESET_ALL}
-  {error_details(e)}""")
-
-
 cdef class SnippetCallbackFn:
     cpdef void apply(self, Context ctx, str snippet, str prefix, IWriter fw) except *:
         pass
@@ -138,31 +116,46 @@ cdef char *str_py2char(char *cbuf, Py_ssize_t buflen, str pystring):
     return ptr
 
 
-cdef class GhostwriterError(Exception):
-    pass
+# TODO: clean this up.
+cdef class GhostwriterError(Error):
+    def __init__(self, str message):
+        super().__init__(message)
+        self._error_message = message
+
+    cpdef str error_message(self):
+        return self._error_message
 
 
-cdef class GhostwriterSnippetError(GhostwriterError):
-    def __init__(self,
-                 snippet_name: str,
-                 line_num: int,
-                 ctx: Context,
-                 *,
-                 reason="Error parsing snippet"):
-        self.snippet_name = snippet_name
+cdef class ParseError(Error):
+    def __init__(self, PARSE_RES error_code, size_t line_num, str fpath):
+        self.message, self.details = parse_result_err(error_code)
+        super().__init__(self.message)
+        self.error_code = error_code
         self.line_num = line_num
-        self.file = ctx.src
-        self.environment = ctx.env
-        self.reason = reason
-        super().__init__(self.reason)
+        self.fpath = fpath
 
-    @property
-    def cause(self):
-        return getattr(self, '__cause__', self.reason)
+    cpdef str error_message(self):
+        return f"{clr.Style.BRIGHT}{clr.Fore.RED}Parse error processing file: {self.message}{clr.Style.RESET_ALL}"
 
-    def __repr__(self):
-        return f"{self.file}:{self.line_num} error expanding snippet '{self.snippet_name}': {self.cause}"
+    cpdef str error_details(self):
+        return f"  {clr.Fore.MAGENTA}Called from: {clr.Style.RESET_ALL}{self.fpath}, line {self.line_num}\n{self.details}"
 
+
+cdef class SnippetError(Error):
+    def __init__(self, Exception exc, str snippet_name, str fpath, size_t line_num):
+        self.exc = exc
+        self.snippet_name = snippet_name
+        self.fpath = fpath
+        self.line_num = line_num
+
+    cpdef str error_message(self):
+        return f"{clr.Style.BRIGHT}{clr.Fore.RED}Error parsing snippet {clr.Fore.MAGENTA}{self.snippet_name}{clr.Fore.RED}:{clr.Style.RESET_ALL}"
+
+    cpdef str error_details(self):
+        return f"""  {clr.Fore.MAGENTA}Called from: {clr.Style.RESET_ALL}{self.fpath}, line {self.line_num}
+  {clr.Fore.MAGENTA}Error: {clr.Style.RESET_ALL}{error_message(self.exc)}
+  {clr.Fore.MAGENTA}Traceback (most recent call last):{clr.Style.RESET_ALL}
+  {error_details(self.exc)}"""
 
 ################################################################################
 ## CString
@@ -381,21 +374,31 @@ cdef inline int file_write(FILE *fh, wcsenc_t *encoder, wchar_t *str, size_t str
     return 0
 
 
-def parse_result_err(PARSE_RES res) -> str:
+def parse_result_err(PARSE_RES res) -> t.Tuple[str, str]:
     if res == PARSE_OK:
-        return "Parse OK"
+        return "Parse OK", ""
     elif res == PARSE_READ_ERR:
-        return "Failed to read from input file"
+        return ("Failed to read from input file",
+                "Parser failed to read from input file. Check file permissions and try again.")
     elif res == PARSE_WRITE_ERR:
-        return "Failed to write to output file"
+        return ("Failed to write to output file",
+                "Parser failed to write to output file")
     elif res == PARSE_EXPECTED_SNIPPET_OPEN:
-        return "Unexpected tag, expected a snippet open tag"
+        return ("Unexpected tag, expected a snippet open tag",
+                "")
     elif res == PARSE_EXPECTED_SNIPPET_CLOSE:
-        return "Unexpected tag, expected a snippet close tag"
+        return ("Unexpected tag, expected a snippet close tag",
+                "")
     elif res == PARSE_SNIPPET_NAMES_MISMATCH:
-        return "open and close tags do not have matching names - nesting error?"
+        return ("open and close tags do not have matching names",
+                "\n".join([
+                 "This happens when the parser has found an opening snippet line (e.g. '<@@ foo @@>')",
+                 "and the first closing snippet line found has a different name, e.g. ('<@@ /bar @@>').",
+                 "",
+                 "This is most likely a typo. Try to ensure that you aren't attempting to nest snippets",
+                 "inside each other and that the names of the start- and end- snippet lines match."]))
     else:
-        return "Unknown parse error!"
+        return "Unknown parse error!", "Unknown error"
 
 
 cdef enum:
@@ -662,9 +665,10 @@ cdef class Parser:
         try:
             ctx.on_snippet.apply(ctx, snippet, prefix, fw)
         except Exception as e:
-            log.error(f"{clr.Style.BRIGHT}{clr.Fore.RED}Fatal error expanding snippet '{clr.Fore.MAGENTA}{snippet}{clr.Fore.RED}'{clr.Style.RESET_ALL}")
-            log_snippet_error(e, snippet, ctx.src)
-            raise e
+            # log.error(f"{clr.Style.BRIGHT}{clr.Fore.RED}Fatal error expanding snippet '{clr.Fore.MAGENTA}{snippet}{clr.Fore.RED}'{clr.Style.RESET_ALL}")
+            # log_snippet_error(e, snippet, ctx.src)
+            # raise e
+            raise SnippetError(e, snippet, ctx.src, self.line_num)
         finally:
             if fflush(fw.out) != 0:
                 log.debug("Failed to flush file buffer - some contents may be missing.")
@@ -722,7 +726,7 @@ cdef class Parser:
                 break  # Done, go back to outer state
         return PARSE_OK
 
-    cpdef PARSE_RES parse(self, SnippetCallbackFn cb: SnippetCallbackFn, str fpath: str):
+    cpdef parse(self, SnippetCallbackFn cb: SnippetCallbackFn, str fpath: str):
         cdef:
             Context ctx = Context(cb, fpath)
             PARSE_RES parse_result = PARSE_EXCEPTION
@@ -730,14 +734,11 @@ cdef class Parser:
 
         try:
             parse_result = self.doparse(ctx)
-        finally:
-            if fflush(self.fh_out) != 0:
-                raise GhostwriterError("flushing output failed!")
-            if self.fh_in != NULL:
-                fclose(self.fh_in)
-                self.fh_in = NULL
 
-            if parse_result == PARSE_OK and self.expanded_snippet and self.should_replace_file.apply(self.temp_file_path, fpath):
+            if parse_result != PARSE_OK:
+                raise ParseError(parse_result, self.line_num, fpath)
+
+            if self.expanded_snippet and self.should_replace_file.apply(self.temp_file_path, fpath):
                 # truncate file because the file may have been used for many iterations now,
                 # some of which may have written more data than this particular file.
                 if ftruncate(fileno(self.fh_out), ftello(self.fh_out)) != 0:
@@ -746,4 +747,9 @@ cdef class Parser:
                     fclose(self.fh_out)
                     self.fh_out = NULL
                 os_replace(self.post_process(fpath, self.temp_file_path), fpath)
-            return parse_result
+        finally:
+            if self.fh_in != NULL:
+                fclose(self.fh_in)
+                self.fh_in = NULL
+            if fflush(self.fh_out) != 0:
+                raise GhostwriterError("flushing output failed!")

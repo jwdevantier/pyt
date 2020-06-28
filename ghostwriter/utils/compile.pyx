@@ -10,17 +10,25 @@ import colorama as clr
 from ghostwriter.utils.fhash cimport file_hash
 from ghostwriter.utils.cwatch cimport CompileWatcher, SearchPathsWatcher, MPScheduler
 from ghostwriter.cli.conf import Configuration, ConfParser
-from ghostwriter.parser.fileparser cimport Context, Parser, GhostwriterSnippetError, SnippetCallbackFn
-from ghostwriter.parser import parse_result_err
+from ghostwriter.parser.fileparser cimport Context, Parser, SnippetCallbackFn
 from ghostwriter.utils.resolv import resolv, resolv_opt
 from ghostwriter.utils.iwriter cimport IWriter
 from ghostwriter.utils.watch import watch_dirs, WatcherConfig
 from ghostwriter.parser.fileparser cimport ShouldReplaceFileAlways
 from ghostwriter.utils.decorators import Debounce
+from ghostwriter.utils.error cimport catch_exception_info, ExceptionInfo, error_details, error_message
 
 
 log = logging.getLogger(__name__)
 Changeset = Set[Tuple[Change, str]]
+
+
+cdef void log_parser_error(str fpath, e):
+    try:
+        details = error_details(e)
+        log.error(f"{clr.Fore.RED}{error_message(e)}{clr.Style.RESET_ALL}\n{details}")
+    except NotImplementedError:
+        log.error(f"{clr.Fore.RED}{error_message(e)}{clr.Style.RESET_ALL}\n{details}")
 
 
 cdef class FileSyncReplace(ShouldReplaceFileCallbackFn):
@@ -153,9 +161,10 @@ cdef class SCCompileFileCallbackFn(CompileFileCallbackFn):
         self.num_calls = 0
 
     cpdef void parse_file(self, str fpath) except *:
-        out = self.parser.parse(self.on_snippet, fpath)
-        if out:
-            log.warning(f"{fpath}: {out}({parse_result_err(out)})")
+        try:
+            self.parser.parse(self.on_snippet, fpath)
+        except Exception as e:
+            log_parser_error(fpath, e)
         self.num_calls += 1
 
 
@@ -224,9 +233,10 @@ cdef class MPCompiler(MPScheduler):
         fpath = jobs.recv()
         # with profiler(f"/tmp/{worker_id}"):
         while fpath != "<stop>":
-            out = parser.parse(expand_snippet, fpath)
-            if out:
-                log.error(f"parse error: {out} ({parse_result_err(out)})\n\tFile: {fpath}")
+            try:
+                parser.parse(expand_snippet, fpath)
+            except Exception as e:
+                log_parser_error(fpath, e)
             fpath = jobs.recv()
 
 

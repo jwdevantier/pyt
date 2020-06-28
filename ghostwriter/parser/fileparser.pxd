@@ -1,7 +1,7 @@
 # cython: language_level=3
 from libc.stdio cimport FILE
 from ghostwriter.utils.iwriter cimport IWriter
-
+from ghostwriter.utils.error cimport Error
 
 ctypedef Py_UNICODE wchar_t
 
@@ -57,16 +57,23 @@ cdef class ShouldReplaceFileAlways(ShouldReplaceFileCallbackFn):
     pass
 
 
-cdef class GhostwriterError(Exception):
-    pass
+cdef class GhostwriterError(Error):
+    cpdef str _error_message
 
 
-cdef class GhostwriterSnippetError(GhostwriterError):
-    cdef public str snippet_name
-    cdef public int line_num
-    cdef public str file
-    cdef public dict environment
-    cdef public str reason
+cdef class ParseError(Error):
+    cpdef public PARSE_RES error_code
+    cpdef public str message
+    cpdef public str details
+    cpdef public size_t line_num
+    cpdef public str fpath
+
+
+cdef class SnippetError(Error):
+    cpdef public Exception exc
+    cpdef public str snippet_name
+    cpdef public str fpath
+    cpdef public size_t line_num
 
 
 cdef class FileWriter(IWriter):
@@ -117,7 +124,7 @@ cdef class Parser:
     cdef int readline(self) nogil
     cdef expand_snippet(self, Context ctx)
     cdef PARSE_RES doparse(self, Context ctx) nogil except PARSE_EXCEPTION
-    cpdef PARSE_RES parse(self, SnippetCallbackFn cb: SnippetCallbackFn, str fpath: str)
+    cpdef parse(self, SnippetCallbackFn cb: SnippetCallbackFn, str fpath: str)
 
 
 cdef class Context:
