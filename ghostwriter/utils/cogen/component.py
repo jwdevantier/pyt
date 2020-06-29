@@ -16,12 +16,23 @@ class ComponentMeta(type):
                 pass
 
         @wraps(orig_init)
-        def init_wrapper(self, *args, **kwargs):
+        def __ghostwriter_component_init__(self, *args, **kwargs):
             """
             Compute scope for component before invoking normal init.
             """
-            # install old init to prevent re-running this multiple times
-            setattr(type(self), '__init__', orig_init)
+            # Fast exit: only run component initialization once per type
+            #
+            # Because of the metaclass, this init method will always be the the outermost __init__ method run.
+            # Remember, this init wrapper is installed on _EACH_ init method along the inheritance chain, from the
+            # class inheriting from Component and onward.
+            #
+            # To avoid running this logic for each component initialized (and for each __init__ in the subclasses(s) of
+            # component), we install an attribute on the type itself which, if found, skips initialization logic and
+            # calls the wrapped __init__ method directly.
+            if getattr(type(self), "__ghostwriter_component_initialized__", False):
+                orig_init(self, *args, **kwargs)
+                return
+            setattr(type(self), "__ghostwriter_component_initialized__", True)
 
             # compute scope
             setattr(type(self), '__ghostwriter_component_scope__', {
@@ -33,7 +44,7 @@ class ComponentMeta(type):
             # call actual init function
             orig_init(self, *args, **kwargs)
 
-        clsdict['__init__'] = init_wrapper
+        clsdict['__init__'] = __ghostwriter_component_init__
         typ = super().__new__(mcs, clsname, bases, clsdict)
         return typ
 
