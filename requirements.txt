@@ -1,5 +1,5 @@
 typing-extensions==3.7.2
-PyYAML==5.1
+PyYAML==5.4
 attrs==19.1.0
 Cython==0.29.7
 Click==7.0
